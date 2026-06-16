@@ -1,0 +1,45 @@
+# =====================
+# Python
+# =====================
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/.env
+
+# Environment Variables
+backend/.env
+
+# Logs
+*.log
+
+# =====================
+# React / Vite
+# =====================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# =====================
+# VS Code
+# =====================
+.vscode/
+.idea/
+
+# =====================
+# OS Files
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# Python Testing
+# =====================
+.pytest_cache/
+.coverage
+
+# =====================
+# Release Notes Index
+# =====================
+backend/release_notes/faiss_index/
