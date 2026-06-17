@@ -34,6 +34,7 @@ import FlagIcon              from '@mui/icons-material/Flag';
 import BugReportIcon         from '@mui/icons-material/BugReport';
 import CodeIcon              from '@mui/icons-material/Code';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 // import BlueprintValidator from './BlueprintValidator';
 import ATFResults from './ATFResults';
@@ -1549,13 +1550,22 @@ function AgentBubble({ msg }) {
                   </CardContent>
                 </Card>
  
-                <ValidatorToggle
-                  blueprint={scopedBlueprint}
-                  validateEndpoint="/api/validate-scoped-app"
-                  onConfirmed={handleBuild}
-                  buildLoading={buildLoading}
-                  selectedFeatures={selectedFeatures} 
-                />
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={buildLoading
+                    ? <CircularProgress size={18} color="inherit" />
+                    : <CloudUploadIcon />}
+                  onClick={handleBuild}
+                  disabled={buildLoading}
+                  sx={{
+                    bgcolor: '#22c55e',
+                    '&:hover': { bgcolor: '#16a34a' },
+                    px: 4,
+                  }}
+                >
+                  {buildLoading ? 'Adding to ServiceNow...' : 'Add into ServiceNow'}
+                </Button>
  
                 {buildError && (
                   <Alert severity="error" sx={{ mt: 2 }}>{buildError}</Alert>

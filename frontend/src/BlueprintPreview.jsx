@@ -455,6 +455,7 @@ export default function BlueprintPreview({ blueprint, selectedFeatures }) {
 
   return (
     <Box>
+
       {/* Module header */}
       <Box sx={{ pl: 1.5, borderLeft: '4px solid #6366f1', mb: 2 }}>
         <Typography variant="h6" fontWeight="bold">{blueprint.module_name}</Typography>

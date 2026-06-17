@@ -51,9 +51,12 @@ import CodeIcon from '@mui/icons-material/Code';
 import FlagIcon from '@mui/icons-material/Flag';
 import RecommendIcon from '@mui/icons-material/Recommend';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import ArticleIcon from '@mui/icons-material/Article';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 
 // import BlueprintValidator from './BlueprintValidator';
 import DiscoveryPanel from './DiscoveryPanel';
+import ReleaseNotesManager from './ReleaseNotesManager';
 
 const drawerWidth = 280;
 const API_BASE = 'http://127.0.0.1:8000';
@@ -1374,6 +1377,51 @@ function NewModuleTool() {
             </CardContent>
           </Card>
 
+          {releaseCheck && (
+            <Paper elevation={0} sx={{
+              p: 2, mb: 2,
+              bgcolor: releaseCheck.has_relevant_changes ? '#fffbeb' : '#f0fdf4',
+              border: `1px solid ${releaseCheck.has_relevant_changes ? '#fcd34d' : '#86efac'}`,
+              borderLeft: `4px solid ${releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a'}`,
+              borderRadius: 2,
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <LibraryBooksIcon sx={{
+                  color: releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a',
+                  mt: 0.2,
+                }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{
+                    color: releaseCheck.has_relevant_changes ? '#92400e' : '#15803d',
+                  }}>
+                    {releaseCheck.has_relevant_changes
+                      ? 'Release notes influenced this blueprint'
+                      : 'No relevant platform changes found'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
+                    {releaseCheck.has_relevant_changes
+                      ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Deprecations or recommendations from these documents were incorporated into the generated app.`
+                      : releaseCheck.sources_checked.length > 0
+                        ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Standard generation workflow used.`
+                        : 'No release notes are indexed yet. Upload them in the "Release Notes" tab to enable this check.'}
+                  </Typography>
+    
+                  {releaseCheck.has_relevant_changes && releaseCheck.relevant_sections?.length > 0 && (
+                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                      {releaseCheck.relevant_sections.map((s, i) => (
+                        <Chip key={i}
+                          label={`${s.source} · p.${s.page}`}
+                          size="small"
+                          sx={{ fontSize: '0.65rem', height: 20, bgcolor: '#fff7ed', color: '#92400e', border: '1px solid #fed7aa' }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            </Paper>
+          )}
+
           {/* Validator */}
           <ValidatorToggle
             blueprint={blueprint}
@@ -1444,6 +1492,7 @@ function ScopedAppTool() {
   const [error, setError] = useState(null);
   const [blueprint,     setBlueprint]     = useState(null);
   const [buildLoading,  setBuildLoading]  = useState(false);
+  const [releaseCheck, setReleaseCheck] = useState(null);
 
   // In NewModuleTool
   const handleGenerate = async () => {
@@ -1451,7 +1500,9 @@ function ScopedAppTool() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setBlueprint(null);
+    // setBlueprint(null);
+    setBlueprint(data.blueprint);
+    setReleaseCheck(data.release_check || null);
 
     try {
       console.log('→ Calling /api/generate-scoped-blueprint with:', prompt);
@@ -1708,18 +1759,16 @@ function App() {
 
   // REPLACE the menuItems array in the App() function
   const menuItems = [
-    { id: 'agent',        label: 'AI Agent',                      icon: <SmartToyIcon /> },   // ← NEW (first)
-    // { id: 'new-module',   label: 'New Module Development',        icon: <AddBoxIcon /> },
-    // { id: 'scoped-app',   label: 'Scoped App Development',        icon: <VpnKeyIcon /> },
-    // { id: 'integrations', label: 'Integration & Modernization',   icon: <SyncAltIcon /> },
-    // { id: 'tech-debt',    label: 'Technical Debt Clearance',      icon: <CleaningServicesIcon /> },
-    // { id: 'release',      label: 'Release & Change Management',   icon: <RocketLaunchIcon /> },
+    { id: 'agent', label: 'AI Agent', icon: <SmartToyIcon /> },  
+    { id: 'release-notes',  label: 'Release Notes', icon: <ArticleIcon /> },
+  
   ];
 
   // REPLACE the renderContent function
   const renderContent = () => {
     switch (activeTab) {
       case 'agent':        return <AgentChat />;          // ← NEW
+      case 'release-notes':  return <ReleaseNotesManager />; 
       case 'new-module':   return <NewModuleTool />;
       case 'scoped-app':   return <ScopedAppTool />;
       case 'tech-debt':    return <TechDebtTool />;
