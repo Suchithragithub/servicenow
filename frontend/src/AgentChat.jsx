@@ -44,6 +44,7 @@ import DiscoveryPanel from './DiscoveryPanel';
 import BlueprintPreview from './BlueprintPreview';
 
 import ScienceIcon from '@mui/icons-material/Science';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 
 const API_BASE  = 'http://127.0.0.1:8000';
 const SESSION_ID = crypto.randomUUID();  // one session per browser tab
@@ -1225,7 +1226,7 @@ function ResultBlock({ result, intent }) {
 
 
 function AgentBubble({ msg }) {
-  const { routing, prescan, progress, result, clarify, error } = msg;
+  const { routing, prescan, progress, result, clarify, error, releaseCheck } = msg;
   const cfg = routing ? (INTENT_CFG[routing.intent] || {}) : {};
  
   // ── local state for the full new_module flow ──────────────────────────────
@@ -1241,6 +1242,7 @@ function AgentBubble({ msg }) {
  
   // scoped_app keeps the original simple flow
   const [scopedBlueprint,  setScopedBlueprint]  = useState(null);
+  // const [releaseCheck, setReleaseCheck] = useState(null);
  
   const isBuildIntent  = ['new_module', 'scoped_app'].includes(routing?.intent);
   const isNewModule    = routing?.intent === 'new_module';
@@ -1549,6 +1551,51 @@ function AgentBubble({ msg }) {
                     </Box>
                   </CardContent>
                 </Card>
+
+                {isScopedApp && releaseCheck && (
+                  <Paper elevation={0} sx={{
+                    p: 2, mb: 2,
+                    bgcolor: releaseCheck.has_relevant_changes ? '#fffbeb' : '#f0fdf4',
+                    border: `1px solid ${releaseCheck.has_relevant_changes ? '#fcd34d' : '#86efac'}`,
+                    borderLeft: `4px solid ${releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a'}`,
+                    borderRadius: 2,
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                      <LibraryBooksIcon sx={{
+                        color: releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a',
+                        mt: 0.2,
+                      }} />
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight="bold" sx={{
+                          color: releaseCheck.has_relevant_changes ? '#92400e' : '#15803d',
+                        }}>
+                          {releaseCheck.has_relevant_changes
+                            ? 'Release notes influenced this blueprint'
+                            : 'No relevant platform changes found'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
+                          {releaseCheck.has_relevant_changes
+                            ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Deprecations or recommendations from these documents were incorporated.`
+                            : releaseCheck.sources_checked?.length > 0
+                              ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Standard generation workflow used.`
+                              : 'No release notes are indexed yet. Upload them in the "Release Notes" tab to enable this check.'}
+                        </Typography>
+    
+                        {releaseCheck.has_relevant_changes && releaseCheck.relevant_sections?.length > 0 && (
+                          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                            {releaseCheck.relevant_sections.map((s, i) => (
+                              <Chip key={i}
+                                label={`${s.source} · p.${s.page}`}
+                                size="small"
+                                sx={{ fontSize: '0.65rem', height: 20, bgcolor: '#fff7ed', color: '#92400e', border: '1px solid #fed7aa' }}
+                              />
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  </Paper>
+                )}
  
                 <Button
                   variant="contained"
@@ -1731,7 +1778,8 @@ export default function AgentChat() {
               }));
               break;
             case 'result':
-              patchMsg(agentId, { result: chunk.data });
+              // patchMsg(agentId, { result: chunk.data });
+              patchMsg(agentId, { result: chunk.data, releaseCheck: chunk.release_check || null });
               break;
             case 'clarify':
               patchMsg(agentId, { clarify: chunk.question });
