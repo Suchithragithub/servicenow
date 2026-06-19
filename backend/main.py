@@ -912,6 +912,69 @@ async def query_release_notes_endpoint(request: Request):
     context = format_context_for_prompt(results)
  
     return {"results": results, "context": context}
+
+#-----------------------------------------------------------------------------
+
+# =============================================================================
+# main.py — ADD this new endpoint (alongside your existing /api/build-and-test)
+# =============================================================================
+
+@app.post("/api/build-scoped-and-test")
+async def build_scoped_and_test(request: Request):
+    """
+    Combined endpoint for SCOPED APPS:
+    1. Builds the scoped app from blueprint
+    2. Immediately generates ATF test suite (scoped-app-aware)
+    3. Returns both build result and ATF suite info
+
+    Request body:
+    {
+        "blueprint": { ...scoped app blueprint dict... }
+    }
+
+    Response:
+    {
+        "status":       "completed",
+        "build_result": { ...what was created... },
+        "atf": {
+            "suite_name":    "...",
+            "suite_sys_id":  "...",
+            "suite_url":     "...",
+            "tests_created": N,
+            "tests":         [...],
+            "errors":        []
+        }
+    }
+    """
+    body      = await request.json()
+    blueprint = body.get("blueprint")
+
+    if not blueprint:
+        raise HTTPException(status_code=400, detail="blueprint is required")
+
+    app_name  = blueprint.get("app_name", "")
+    app_scope = blueprint.get("app_scope", "")
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    # Step 1: Build the scoped app
+    from services import build_scoped_app_from_blueprint
+    build_result = await loop.run_in_executor(
+        None, lambda: build_scoped_app_from_blueprint(blueprint)
+    )
+
+    # Step 2: Generate ATF tests (scoped-app-aware version)
+    from atf_builder import build_scoped_atf_suite
+    atf_result = await loop.run_in_executor(
+        None, lambda: build_scoped_atf_suite(app_name, app_scope, build_result, blueprint)
+    )
+
+    return {
+        "status":       "completed",
+        "build_result": build_result,
+        "atf":          atf_result,
+    }
     
 # ─────────────────────────────────────────
 # HEALTH CHECK

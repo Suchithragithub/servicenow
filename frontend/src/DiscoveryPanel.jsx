@@ -551,8 +551,15 @@ export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCance
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
             <Box sx={{ color: scenarioCfg.color }}>{scenarioCfg.icon}</Box>
-            <Typography variant="subtitle1" fontWeight="bold" sx={{ color: scenarioCfg.color }}>
+            {/* <Typography variant="subtitle1" fontWeight="bold" sx={{ color: scenarioCfg.color }}>
               Scenario {status.scenario}: {scenarioCfg.title}
+            </Typography> */}
+            <Typography
+              variant="subtitle1"
+              fontWeight="bold"
+              sx={{ color: scenarioCfg.color }}
+            >
+              {scenarioCfg.title}
             </Typography>
             <Chip label={`${pct}% complete`} size="small"
               sx={{ ml: 'auto', bgcolor: scenarioCfg.color, color: '#fff', fontWeight: 'bold' }} />

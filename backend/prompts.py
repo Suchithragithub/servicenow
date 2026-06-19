@@ -171,12 +171,34 @@ Format expected:
 }
 """
 
+RELEASE_IMPACT_INSTRUCTION = """
+You may be given additional context under the heading "RECENT SERVICENOW
+RELEASE NOTES RELEVANT TO THIS REQUEST". This context is organized by
+component type (tables, acls, workflows, forms, etc.).
+
+For EACH component type you generate, check if any of the provided release
+note context for that SPECIFIC component type actually requires a change
+to what you would otherwise generate (e.g. a deprecated approach being
+replaced, a new security requirement, a changed recommended pattern).
+
+CRITICAL HONESTY RULE: Only report a change in "release_notes_impact" if
+the release note content GENUINELY altered a specific decision you made
+(e.g. a table name, field type, role name, ACL operation, workflow trigger).
+Do NOT invent or force a justification just to have something to report.
+If the release notes for a component were irrelevant or did not change
+anything you would have generated anyway, do not include an entry for it.
+An empty "release_notes_impact" array is the CORRECT output when nothing
+genuinely applied — this is expected and preferred over fabricated claims.
+"""
+
 SCOPED_APP_PROMPT = """
 You are an expert ServiceNow Certified Master Architect (CMA).
 The user will provide a business requirement.
 Your job is to design a COMPLETE ServiceNow Scoped Application architecture.
 
 You must return ONLY a raw JSON object. Do not include markdown formatting.
+If release note context is provided below, follow the honesty rules for
+reporting release_notes_impact described separately.
 
 STRICT NAMING RULES:
 - App scope format: x_snc_<appname> (max 18 chars, no spaces)
@@ -294,7 +316,16 @@ Generate the architecture using the exact JSON structure below.
         }
       ]
     }
+  ],
+  "release_notes_impact": [
+    {
+      "component":   "<which component type this affected: tables | fields | roles | acls | workflows | forms | navigation>",
+      "change_made": "<specific, concrete description of what was changed>",
+      "reason":      "<why — what the release note said that required this>",
+      "source":      "<document name and page number, e.g. 'zurich-release-notes.pdf, page 1594'>"
+    }
   ]
+
 }
 """
 

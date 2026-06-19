@@ -39,23 +39,93 @@ from rag_release_notes import query_release_notes, format_context_for_prompt, li
 # checks release notes relevant to the requirement
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _check_release_notes_for_scoped_app(prompt: str) -> dict:
+# def _check_release_notes_for_scoped_app(prompt: str) -> dict:
+#     """
+#     Queries the indexed release notes for anything relevant to scoped app
+#     development before generating the blueprint. Returns context to inject
+#     into the LLM prompt, plus a flag for whether anything relevant was found.
+ 
+#     Returns:
+#         {
+#             "has_relevant_changes": bool,
+#             "context_block":        str,   # formatted text for prompt injection
+#             "raw_results":          list,
+#             "sources_checked":      list
+#         }
+#     """
+#     print("\n📚 CHECKING RELEASE NOTES FOR SCOPED APP IMPACT...")
+ 
+#     # Check if anything is indexed at all
+#     index_status = list_indexed_sources()
+#     if index_status["total_vectors"] == 0:
+#         print("  ℹ️  No release notes indexed. Proceeding with standard generation.")
+#         return {
+#             "has_relevant_changes": False,
+#             "context_block":        "",
+#             "raw_results":          [],
+#             "sources_checked":      [],
+#         }
+ 
+#     # Build a query that combines the user's requirement with general
+#     # scoped-app-relevant change categories
+#     search_query = (
+#         f"scoped application development changes deprecations security updates "
+#         f"recommendations related to: {prompt}"
+#     )
+ 
+#     results = query_release_notes(search_query, top_k=6)
+ 
+#     # Filter to reasonably relevant results only (cosine similarity threshold)
+#     RELEVANCE_THRESHOLD = 0.35
+#     relevant_results = [r for r in results if r["score"] >= RELEVANCE_THRESHOLD]
+ 
+#     sources_checked = list(set(r["source"] for r in results))
+ 
+#     if not relevant_results:
+#         print(f"  ✅ No highly relevant release note changes found (checked {len(sources_checked)} doc(s))")
+#         return {
+#             "has_relevant_changes": False,
+#             "context_block":        "",
+#             "raw_results":          results,
+#             "sources_checked":      sources_checked,
+#         }
+ 
+#     print(f"  ⚠️  Found {len(relevant_results)} relevant release note section(s):")
+#     for r in relevant_results:
+#         print(f"     - {r['source']} (page {r['page']}, score {r['score']:.2f})")
+ 
+#     context_block = format_context_for_prompt(relevant_results)
+ 
+#     return {
+#         "has_relevant_changes": True,
+#         "context_block":        context_block,
+#         "raw_results":          relevant_results,
+#         "sources_checked":      sources_checked,
+#     }
+
+def _check_release_notes_for_scoped_app(prompt: str, selected_features: list = None) -> dict:
     """
-    Queries the indexed release notes for anything relevant to scoped app
-    development before generating the blueprint. Returns context to inject
-    into the LLM prompt, plus a flag for whether anything relevant was found.
+    Queries the indexed release notes once PER component type being built,
+    instead of one blended generic search. This gives the LLM targeted,
+    feature-specific context rather than a vague mixed bag of chunks.
+ 
+    Args:
+        prompt:             the user's app requirement text
+        selected_features:  list of component types being generated
+                            e.g. ["tables", "acls", "workflows", "forms"]
+                            If None, defaults to a standard scoped app set.
  
     Returns:
         {
             "has_relevant_changes": bool,
-            "context_block":        str,   # formatted text for prompt injection
-            "raw_results":          list,
-            "sources_checked":      list
+            "context_block":        str,   # formatted, grouped by component
+            "raw_results":          list,  # all chunks retrieved, tagged by component
+            "sources_checked":      list,
+            "components_searched":  list
         }
     """
-    print("\n📚 CHECKING RELEASE NOTES FOR SCOPED APP IMPACT...")
+    print("\n📚 CHECKING RELEASE NOTES (PER-FEATURE TARGETED SEARCH)...")
  
-    # Check if anything is indexed at all
     index_status = list_indexed_sources()
     if index_status["total_vectors"] == 0:
         print("  ℹ️  No release notes indexed. Proceeding with standard generation.")
@@ -64,43 +134,70 @@ def _check_release_notes_for_scoped_app(prompt: str) -> dict:
             "context_block":        "",
             "raw_results":          [],
             "sources_checked":      [],
+            "components_searched":  [],
         }
  
-    # Build a query that combines the user's requirement with general
-    # scoped-app-relevant change categories
-    search_query = (
-        f"scoped application development changes deprecations security updates "
-        f"recommendations related to: {prompt}"
-    )
+    if not selected_features:
+        selected_features = ["tables", "fields", "roles", "acls", "workflows", "forms", "navigation"]
  
-    results = query_release_notes(search_query, top_k=6)
+    RELEVANCE_THRESHOLD = 0.40   # raised from 0.35 — fewer, more targeted matches
+    TOP_K_PER_FEATURE    = 3      # max chunks per component type
  
-    # Filter to reasonably relevant results only (cosine similarity threshold)
-    RELEVANCE_THRESHOLD = 0.35
-    relevant_results = [r for r in results if r["score"] >= RELEVANCE_THRESHOLD]
+    all_relevant   = []
+    sources_seen   = set()
  
-    sources_checked = list(set(r["source"] for r in results))
+    for feature in selected_features:
+        query = (
+            f"ServiceNow {feature} deprecations security updates "
+            f"recommendations changes — context: {prompt}"
+        )
+        results = query_release_notes(query, top_k=TOP_K_PER_FEATURE)
  
-    if not relevant_results:
-        print(f"  ✅ No highly relevant release note changes found (checked {len(sources_checked)} doc(s))")
+        for r in results:
+            if r["score"] >= RELEVANCE_THRESHOLD:
+                r["searched_for_component"] = feature   # tag which feature this was retrieved for
+                all_relevant.append(r)
+                sources_seen.add(r["source"])
+ 
+        if results:
+            top_score = max(r["score"] for r in results)
+            print(f"  🔍 {feature}: top match score {top_score:.2f}"
+                  f" ({'kept' if top_score >= RELEVANCE_THRESHOLD else 'below threshold, discarded'})")
+ 
+    if not all_relevant:
+        print(f"  ✅ No release note chunk cleared the {RELEVANCE_THRESHOLD} threshold for any component.")
         return {
             "has_relevant_changes": False,
             "context_block":        "",
-            "raw_results":          results,
-            "sources_checked":      sources_checked,
+            "raw_results":          [],
+            "sources_checked":      list(sources_seen),
+            "components_searched":  selected_features,
         }
  
-    print(f"  ⚠️  Found {len(relevant_results)} relevant release note section(s):")
-    for r in relevant_results:
-        print(f"     - {r['source']} (page {r['page']}, score {r['score']:.2f})")
+    print(f"  ⚠️  {len(all_relevant)} chunk(s) cleared threshold across {len(set(r['searched_for_component'] for r in all_relevant))} component(s)")
  
-    context_block = format_context_for_prompt(relevant_results)
+    # Group context by component type for clearer prompt structure
+    by_component = {}
+    for r in all_relevant:
+        by_component.setdefault(r["searched_for_component"], []).append(r)
+ 
+    context_blocks = []
+    for component, chunks in by_component.items():
+        block_lines = [f"--- Context for component: {component} ---"]
+        for c in chunks:
+            block_lines.append(
+                f"[Source: {c['source']}, Page {c['page']}, Relevance: {c['score']:.2f}]\n{c['text']}"
+            )
+        context_blocks.append("\n\n".join(block_lines))
+ 
+    context_block = "\n\n".join(context_blocks)
  
     return {
         "has_relevant_changes": True,
         "context_block":        context_block,
-        "raw_results":          relevant_results,
-        "sources_checked":      sources_checked,
+        "raw_results":          all_relevant,
+        "sources_checked":      list(sources_seen),
+        "components_searched":  selected_features,
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -574,35 +671,83 @@ def build_servicenow_module_from_blueprint(blueprint: dict):
 #     print(f"\n✅ Blueprint received for: {blueprint.get('app_name')} | Scope: {blueprint.get('app_scope')}")
 #     return _push_scoped_blueprint(blueprint, blueprint.get("app_name"), blueprint.get("app_scope"), blueprint.get("description", ""))
 
-def build_scoped_app(prompt: str):
+# def build_scoped_app(prompt: str):
+#     print("\n" + "=" * 60)
+#     print(f"🚀 INITIATING SCOPED APP CREATION: '{prompt}'")
+#     print("=" * 60)
+ 
+#     # ── STEP 1: Check release notes for relevant platform changes ──────────
+#     release_check = _check_release_notes_for_scoped_app(prompt)
+ 
+#     # ── STEP 2: Build the system prompt — inject release note context if found
+#     system_prompt = SCOPED_APP_PROMPT
+#     if release_check["has_relevant_changes"]:
+#         system_prompt = (
+#             f"{SCOPED_APP_PROMPT}\n\n"
+#             f"IMPORTANT — RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST:\n"
+#             f"{release_check['context_block']}\n\n"
+#             f"Incorporate any deprecations, security updates, or new recommendations "
+#             f"from the above into your generated blueprint. For example, if an older "
+#             f"approach is deprecated, use the recommended replacement instead."
+#         )
+#         print("  🔄 Injecting release note context into generation prompt")
+#     else:
+#         print("  ➡️  Proceeding with standard generation workflow (no relevant changes found)")
+ 
+#     # ── STEP 3: Generate blueprint with (possibly augmented) prompt ────────
+#     client = get_openai_client()
+#     response = client.chat.completions.create(
+#         model=OPENAI_DEPLOYMENT,
+#         temperature=0.2,
+#         max_tokens=3000,
+#         messages=[
+#             {"role": "system", "content": system_prompt},
+#             {"role": "user",   "content": prompt}
+#         ]
+#     )
+ 
+#     llm_response = re.sub(r'```json\n?|```\n?', '', response.choices[0].message.content).strip()
+#     blueprint     = json.loads(llm_response)
+ 
+#     # Attach release note check info to blueprint for visibility/audit
+#     blueprint["_release_notes_check"] = {
+#         "checked":             True,
+#         "has_relevant_changes": release_check["has_relevant_changes"],
+#         "sources_checked":     release_check["sources_checked"],
+#     }
+ 
+#     print(f"\n✅ Blueprint received for: {blueprint.get('app_name')} | Scope: {blueprint.get('app_scope')}")
+#     return _push_scoped_blueprint(
+#         blueprint, blueprint.get("app_name"),
+#         blueprint.get("app_scope"), blueprint.get("description", "")
+#     )
+
+def build_scoped_app(prompt: str, selected_features: list = None):
     print("\n" + "=" * 60)
     print(f"🚀 INITIATING SCOPED APP CREATION: '{prompt}'")
     print("=" * 60)
  
-    # ── STEP 1: Check release notes for relevant platform changes ──────────
-    release_check = _check_release_notes_for_scoped_app(prompt)
+    release_check = _check_release_notes_for_scoped_app(prompt, selected_features)
  
-    # ── STEP 2: Build the system prompt — inject release note context if found
     system_prompt = SCOPED_APP_PROMPT
     if release_check["has_relevant_changes"]:
         system_prompt = (
             f"{SCOPED_APP_PROMPT}\n\n"
-            f"IMPORTANT — RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST:\n"
+            f"RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST "
+            f"(organized by component):\n"
             f"{release_check['context_block']}\n\n"
-            f"Incorporate any deprecations, security updates, or new recommendations "
-            f"from the above into your generated blueprint. For example, if an older "
-            f"approach is deprecated, use the recommended replacement instead."
+            f"{RELEASE_IMPACT_INSTRUCTION}"
         )
-        print("  🔄 Injecting release note context into generation prompt")
+        print(f"  🔄 Injecting per-component release note context "
+              f"({', '.join(release_check['sources_checked'])})")
     else:
         print("  ➡️  Proceeding with standard generation workflow (no relevant changes found)")
  
-    # ── STEP 3: Generate blueprint with (possibly augmented) prompt ────────
     client = get_openai_client()
     response = client.chat.completions.create(
         model=OPENAI_DEPLOYMENT,
         temperature=0.2,
-        max_tokens=3000,
+        max_tokens=3500,   # increased slightly to fit release_notes_impact field
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": prompt}
@@ -610,21 +755,28 @@ def build_scoped_app(prompt: str):
     )
  
     llm_response = re.sub(r'```json\n?|```\n?', '', response.choices[0].message.content).strip()
-    blueprint     = json.loads(llm_response)
+    blueprint    = json.loads(llm_response)
  
-    # Attach release note check info to blueprint for visibility/audit
+    # Use the LLM's OWN reported impact — not our retrieval guess.
+    # If LLM didn't include the key, default to empty (honest fallback).
+    llm_reported_impact = blueprint.get("release_notes_impact", [])
+ 
     blueprint["_release_notes_check"] = {
-        "checked":             True,
-        "has_relevant_changes": release_check["has_relevant_changes"],
-        "sources_checked":     release_check["sources_checked"],
+        "checked":              True,
+        "components_searched":  release_check["components_searched"],
+        "sources_checked":      release_check["sources_checked"],
+        "chunks_retrieved":     len(release_check["raw_results"]),
+        "llm_reported_changes": len(llm_reported_impact),
     }
  
     print(f"\n✅ Blueprint received for: {blueprint.get('app_name')} | Scope: {blueprint.get('app_scope')}")
+    print(f"   LLM self-reported {len(llm_reported_impact)} genuine release-note-driven change(s)")
+ 
     return _push_scoped_blueprint(
         blueprint, blueprint.get("app_name"),
         blueprint.get("app_scope"), blueprint.get("description", "")
     )
-
+ 
 
 def build_scoped_app_from_blueprint(blueprint: dict):
     print("\n" + "=" * 60)

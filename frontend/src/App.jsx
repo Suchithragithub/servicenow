@@ -53,10 +53,14 @@ import RecommendIcon from '@mui/icons-material/Recommend';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import ArticleIcon from '@mui/icons-material/Article';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import CloudUploadIcon  from '@mui/icons-material/CloudUpload';
 
 // import BlueprintValidator from './BlueprintValidator';
 import DiscoveryPanel from './DiscoveryPanel';
 import ReleaseNotesManager from './ReleaseNotesManager';
+
+import ScienceIcon from '@mui/icons-material/Science';
+import ATFResults from './ATFResults';
 
 const drawerWidth = 280;
 const API_BASE = 'http://127.0.0.1:8000';
@@ -1493,6 +1497,7 @@ function ScopedAppTool() {
   const [blueprint,     setBlueprint]     = useState(null);
   const [buildLoading,  setBuildLoading]  = useState(false);
   const [releaseCheck, setReleaseCheck] = useState(null);
+  const [atfResult, setAtfResult] = useState(null);
 
   // In NewModuleTool
   const handleGenerate = async () => {
@@ -1501,8 +1506,10 @@ function ScopedAppTool() {
     setError(null);
     setResult(null);
     // setBlueprint(null);
-    setBlueprint(data.blueprint);
-    setReleaseCheck(data.release_check || null);
+    // setBlueprint(data.blueprint);
+    // setReleaseCheck(data.release_check || null);
+    setBlueprint(null);
+    setReleaseCheck(null);
 
     try {
       console.log('→ Calling /api/generate-scoped-blueprint with:', prompt);
@@ -1526,6 +1533,7 @@ function ScopedAppTool() {
       }
 
       setBlueprint(data.blueprint);
+      setReleaseCheck(data.release_check || null);
     } catch (err) {
       console.error('→ handleGenerate error:', err);
       setError(err.message);
@@ -1535,19 +1543,40 @@ function ScopedAppTool() {
   };
 
   // Phase 2: User clicked "Add into ServiceNow" after validation passed
+  // const handleBuild = async () => {
+  //   if (!blueprint) return;
+  //   setBuildLoading(true);
+  //   setError(null);
+  //   try {
+  //     const response = await fetch(`${API_BASE}/api/build-scoped-from-blueprint`, {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ blueprint }),
+  //     });
+  //     if (!response.ok) throw new Error('Build failed');
+  //     const data = await response.json();
+  //     setResult(data.data.raw_blueprint);
+  //   } catch (err) {
+  //     setError(err.message);
+  //   } finally {
+  //     setBuildLoading(false);
+  //   }
+  // };
+
   const handleBuild = async () => {
     if (!blueprint) return;
     setBuildLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/build-scoped-from-blueprint`, {
+      const response = await fetch(`${API_BASE}/api/build-scoped-and-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ blueprint }),
       });
       if (!response.ok) throw new Error('Build failed');
       const data = await response.json();
-      setResult(data.data.raw_blueprint);
+      setResult(data.build_result?.raw_blueprint || data.build_result);
+      setAtfResult(data.atf || null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1614,7 +1643,7 @@ function ScopedAppTool() {
 
               {/* Validator */}
               {/* Validator + Push button — collapsible */}
-              <ValidatorToggle
+              {/* <ValidatorToggle
                 blueprint={blueprint}
                 validateEndpoint={
                   routing?.intent === 'scoped_app'
@@ -1624,7 +1653,114 @@ function ScopedAppTool() {
                 onConfirmed={handleBuild}
                 buildLoading={buildLoading}
                 selectedFeatures={selectedFeatures} 
-              />
+              /> */}
+
+              {/* Release notes impact banner */}
+              {releaseCheck && (
+                <Box sx={{ mb: 2 }}>
+                  {releaseCheck.reported_changes?.length > 0 ? (
+                    <Paper elevation={0} sx={{
+                      p: 2, bgcolor: '#fffbeb',
+                      border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
+                      borderRadius: 2,
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                        <LibraryBooksIcon sx={{ color: '#d97706' }} />
+                        <Typography variant="body2" fontWeight="bold" sx={{ color: '#92400e' }}>
+                          {releaseCheck.reported_changes.length} change(s) made based on release notes
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {releaseCheck.reported_changes.map((change, i) => (
+                          <Paper key={i} elevation={0} sx={{
+                            p: 1.5, bgcolor: 'white',
+                            border: '1px solid #fde68a', borderRadius: 1.5,
+                          }}>
+                            <Chip
+                              label={change.component}
+                              size="small"
+                              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold',
+                                    bgcolor: '#fef3c7', color: '#92400e', mb: 0.5 }}
+                            />
+                            <Typography variant="body2" fontWeight="medium" sx={{ mb: 0.4 }}>
+                              {change.change_made}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                              {change.reason}
+                            </Typography>
+                            <Chip
+                              label={change.source}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.62rem', height: 18, borderColor: '#d97706', color: '#92400e' }}
+                            />
+                          </Paper>
+                        ))}
+                      </Box>
+                    </Paper>
+                  ) : (
+                    <Paper elevation={0} sx={{
+                      p: 2, bgcolor: '#f0fdf4',
+                      border: '1px solid #86efac', borderLeft: '4px solid #16a34a',
+                      borderRadius: 2,
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <LibraryBooksIcon sx={{ color: '#16a34a' }} />
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold" sx={{ color: '#15803d' }}>
+                            Release notes checked — no changes were necessary
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {releaseCheck.sources_checked?.length > 0
+                              ? `Checked ${releaseCheck.chunks_retrieved || 0} relevant section(s) across: ${releaseCheck.sources_checked.join(', ')}.`
+                              : 'No release notes are indexed yet. Upload them in the "Release Notes" tab.'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Paper>
+                  )}
+                </Box>
+              )}
+ 
+              {/* Deploy button */}
+              {/* <Button
+                variant="contained"
+                size="large"
+                startIcon={buildLoading
+                  ? <CircularProgress size={18} color="inherit" />
+                  : <CloudUploadIcon />}
+                onClick={handleBuild}
+                disabled={buildLoading}
+                sx={{
+                  bgcolor: '#22c55e',
+                  '&:hover': { bgcolor: '#16a34a' },
+                  px: 4,
+                }}
+              >
+                {buildLoading ? 'Adding to ServiceNow...' : 'Add into ServiceNow'}
+              </Button> */}
+
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={buildLoading
+                  ? <CircularProgress size={18} color="inherit" />
+                  : <ScienceIcon />}
+                onClick={handleBuild}
+                disabled={buildLoading}
+                sx={{
+                  bgcolor: '#22c55e',
+                  '&:hover': { bgcolor: '#16a34a' },
+                  px: 4,
+                }}
+              >
+                {buildLoading ? 'Creating in ServiceNow...' : 'Add into ServiceNow & Generate ATF Tests'}
+              </Button>
+ 
+              {error && (
+                <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+              )}
+
             </Box>
           )}
 
@@ -1717,7 +1853,19 @@ function ScopedAppTool() {
               </Card>
             </Grid>
           </Grid>
-          <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+          {/* <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography fontWeight="bold" color="text.secondary">View Raw AI JSON Output</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Paper sx={{ p: 2, backgroundColor: '#1e1e1e', color: '#a6e22e', overflowX: 'auto', maxHeight: '400px' }}>
+                <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '13px', textAlign: 'left' }}>
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </Paper>
+            </AccordionDetails>
+          </Accordion> */}
+           <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography fontWeight="bold" color="text.secondary">View Raw AI JSON Output</Typography>
             </AccordionSummary>
@@ -1729,6 +1877,18 @@ function ScopedAppTool() {
               </Paper>
             </AccordionDetails>
           </Accordion>
+
+          {/* ADD THIS — ATF test results */}
+          {atfResult && (
+            <Box sx={{ mt: 3 }}>
+              <ATFResults
+                atf={atfResult}
+                moduleName={result.app_name}
+                snowInstance="https://abhrademo5.service-now.com"
+              />
+            </Box>
+          )}
+
         </Box>
       )}
     </Box>

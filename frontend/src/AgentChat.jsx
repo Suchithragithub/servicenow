@@ -1331,9 +1331,13 @@ function AgentBubble({ msg }) {
     setBuildLoading(true);
     setBuildError(null);
  
+    // const endpoint = isScopedApp
+    //   ? '/api/build-scoped-from-blueprint'
+    //   : '/api/build-and-test';        // ← uses new combined endpoint
+
     const endpoint = isScopedApp
-      ? '/api/build-scoped-from-blueprint'
-      : '/api/build-and-test';        // ← uses new combined endpoint
+      ? '/api/build-scoped-and-test'   // ← now also generates ATF
+      : '/api/build-and-test';
  
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -1552,7 +1556,7 @@ function AgentBubble({ msg }) {
                   </CardContent>
                 </Card>
 
-                {isScopedApp && releaseCheck && (
+                {/* {isScopedApp && releaseCheck && (
                   <Paper elevation={0} sx={{
                     p: 2, mb: 2,
                     bgcolor: releaseCheck.has_relevant_changes ? '#fffbeb' : '#f0fdf4',
@@ -1595,9 +1599,78 @@ function AgentBubble({ msg }) {
                       </Box>
                     </Box>
                   </Paper>
-                )}
+                )} */}
+
+                {isScopedApp && releaseCheck && (
+              <Box sx={{ mb: 2 }}>
+                {releaseCheck.reported_changes?.length > 0 ? (
+                  <Paper elevation={0} sx={{
+                    p: 2, bgcolor: '#fffbeb',
+                    border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
+                    borderRadius: 2,
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                      <LibraryBooksIcon sx={{ color: '#d97706' }} />
+                      <Typography variant="body2" fontWeight="bold" sx={{ color: '#92400e' }}>
+                        {releaseCheck.reported_changes.length} change(s) made based on release notes
+                      </Typography>
+                    </Box>
  
-                <Button
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {releaseCheck.reported_changes.map((change, i) => (
+                        <Paper key={i} elevation={0} sx={{
+                          p: 1.5, bgcolor: 'white',
+                          border: '1px solid #fde68a', borderRadius: 1.5,
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <Chip
+                              label={change.component}
+                              size="small"
+                              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold',
+                                    bgcolor: '#fef3c7', color: '#92400e' }}
+                            />
+                          </Box>
+                          <Typography variant="body2" fontWeight="medium" sx={{ mb: 0.4 }}>
+                            {change.change_made}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                            {change.reason}
+                          </Typography>
+                          <Chip
+                            label={change.source}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.62rem', height: 18, borderColor: '#d97706', color: '#92400e' }}
+                          />
+                        </Paper>
+                      ))}
+                    </Box>
+                  </Paper>
+                ) : (
+                  <Paper elevation={0} sx={{
+                    p: 2, bgcolor: '#f0fdf4',
+                    border: '1px solid #86efac', borderLeft: '4px solid #16a34a',
+                    borderRadius: 2,
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <LibraryBooksIcon sx={{ color: '#16a34a' }} />
+                      <Box>
+                        <Typography variant="body2" fontWeight="bold" sx={{ color: '#15803d' }}>
+                          Release notes checked — no changes were necessary
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {releaseCheck.sources_checked?.length > 0
+                            ? `Checked ${releaseCheck.chunks_retrieved || 0} relevant section(s) across: ${releaseCheck.sources_checked.join(', ')}. Nothing required a change to this build.`
+                            : 'No release notes are indexed yet. Upload them in the "Release Notes" tab to enable this check.'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Paper>
+                )}
+              </Box>
+            )}
+ 
+                {/* <Button
                   variant="contained"
                   size="large"
                   startIcon={buildLoading
@@ -1612,6 +1685,23 @@ function AgentBubble({ msg }) {
                   }}
                 >
                   {buildLoading ? 'Adding to ServiceNow...' : 'Add into ServiceNow'}
+                </Button> */}
+
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={buildLoading
+                    ? <CircularProgress size={18} color="inherit" />
+                    : <ScienceIcon />}
+                  onClick={handleBuild}
+                  disabled={buildLoading}
+                  sx={{
+                    bgcolor: '#22c55e',
+                    '&:hover': { bgcolor: '#16a34a' },
+                    px: 4,
+                  }}
+                >
+                  {buildLoading ? 'Creating in ServiceNow...' : 'Add into ServiceNow & Generate ATF Tests'}
                 </Button>
  
                 {buildError && (
@@ -1621,8 +1711,25 @@ function AgentBubble({ msg }) {
             )}
  
             {/* After successful build */}
-            {buildResult && (
+            {/* {buildResult && (
               <ResultBlock result={buildResult} intent={routing?.intent} />
+            )} */}
+            {buildResult && (
+              <Box>
+                <ResultBlock
+                  result={buildResult.build_result || buildResult}
+                  intent={routing?.intent}
+                />
+                {buildResult.atf && (
+                  <Box sx={{ mt: 2 }}>
+                    <ATFResults
+                      atf={buildResult.atf}
+                      moduleName={scopedBlueprint?.app_name || moduleName}
+                      snowInstance="https://abhrademo5.service-now.com"
+                    />
+                  </Box>
+                )}
+              </Box>
             )}
           </Box>
         )}

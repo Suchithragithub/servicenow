@@ -153,18 +153,42 @@ def create_snow_field(table_name: str, field_label: str, field_name: str, intern
     response = safe_post(url, payload)
     return response.status_code == 201
 
+# def create_snow_role(role_name: str, app_sys_id: str = None):
+#     url = f"{SNOW_BASE_URL}/sys_user_role"
+#     if not role_name.startswith("u_"): role_name = f"u_{role_name}"
+#     payload = {
+#         "name": role_name,
+#         "description": f"Auto-generated role: {role_name}"
+#     }
+#     if app_sys_id:  # <-- Add this
+#         payload["sys_scope"] = app_sys_id
+#         payload["sys_package"] = app_sys_id
+#     response = safe_post(url, payload)
+#     if response.status_code == 201: return True, response.json().get("result", {}).get("sys_id")
+#     return False, None
+
 def create_snow_role(role_name: str, app_sys_id: str = None):
     url = f"{SNOW_BASE_URL}/sys_user_role"
-    if not role_name.startswith("u_"): role_name = f"u_{role_name}"
+    if not role_name.startswith("u_"):
+        role_name = f"u_{role_name}"
+ 
     payload = {
         "name": role_name,
         "description": f"Auto-generated role: {role_name}"
     }
-    if app_sys_id:  # <-- Add this
-        payload["sys_scope"] = app_sys_id
+    if app_sys_id:
+        payload["sys_scope"]   = app_sys_id
         payload["sys_package"] = app_sys_id
+ 
     response = safe_post(url, payload)
-    if response.status_code == 201: return True, response.json().get("result", {}).get("sys_id")
+ 
+    if response.status_code == 201:
+        return True, response.json().get("result", {}).get("sys_id")
+ 
+    # ── DEBUG: print exactly why it failed ──────────────────────────────────
+    print(f"    ❌ Role creation failed ({response.status_code}): {response.text[:300]}")
+    # ── END DEBUG ────────────────────────────────────────────────────────────
+ 
     return False, None
 
 def create_snow_form(form_name: str, target_table: str, visible_fields: list, app_sys_id: str = None):

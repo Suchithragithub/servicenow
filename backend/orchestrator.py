@@ -678,46 +678,124 @@ class Orchestrator:
     #         yield _chunk("error", message=str(e))
 
 
+    # async def _run_scoped_app(self,
+    #                        prompt: str,
+    #                        params: dict,
+    #                        prescan: dict) -> AsyncGenerator[str, None]:
+    #     """
+    #     Generates scoped app blueprint only — no ServiceNow writes.
+    #     Now checks indexed release notes (Australia/Zurich PDFs) BEFORE
+    #     generation and injects relevant context into the prompt if found.
+    #     Frontend handles validate → push flow via the "Add into ServiceNow" button.
+    #     """
+    #     import re, json
+    #     from prompts import SCOPED_APP_PROMPT
+    #     from services import _check_release_notes_for_scoped_app
+    #     loop = asyncio.get_event_loop()
+ 
+    #     try:
+    #         # ── STEP 1: Check release notes (read-only, local FAISS search) ──
+    #         release_check = await loop.run_in_executor(
+    #             None, lambda: _check_release_notes_for_scoped_app(prompt)
+    #         )
+ 
+    #         system_prompt = SCOPED_APP_PROMPT
+    #         if release_check["has_relevant_changes"]:
+    #             system_prompt = (
+    #                 f"{SCOPED_APP_PROMPT}\n\n"
+    #                 f"IMPORTANT — RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST:\n"
+    #                 f"{release_check['context_block']}\n\n"
+    #                 f"Incorporate any deprecations, security updates, or new recommendations "
+    #                 f"from the above into your generated blueprint."
+    #             )
+    #             print(f"[Orchestrator] Release notes relevant — injecting context from {release_check['sources_checked']}")
+    #         else:
+    #             print("[Orchestrator] No relevant release note changes found — standard generation")
+ 
+    #         # ── STEP 2: Generate blueprint with (possibly augmented) prompt ──
+    #         def _generate():
+    #             resp = self.llm.chat.completions.create(
+    #                 model=OPENAI_DEPLOYMENT,
+    #                 temperature=0.2,
+    #                 max_tokens=3000,
+    #                 messages=[
+    #                     {"role": "system", "content": system_prompt},
+    #                     {"role": "user",   "content": prompt},
+    #                 ]
+    #             )
+    #             raw = resp.choices[0].message.content
+    #             raw = re.sub(r'```json\n?|```\n?', '', raw).strip()
+    #             return json.loads(raw)
+ 
+    #         blueprint = await loop.run_in_executor(None, _generate)
+ 
+    #         # ── STEP 3: Attach release check metadata to the blueprint ───────
+    #         blueprint["_release_notes_check"] = {
+    #             "checked":              True,
+    #             "has_relevant_changes": release_check["has_relevant_changes"],
+    #             "sources_checked":      release_check["sources_checked"],
+    #         }
+ 
+    #         # ── STEP 4: Pass release_check through the SSE result payload ────
+    #         # so AgentBubble can render the same banner ScopedAppTool shows
+    #         yield _chunk("result",
+    #                     data=blueprint,
+    #                     release_check={
+    #                         "has_relevant_changes": release_check["has_relevant_changes"],
+    #                         "sources_checked":      release_check["sources_checked"],
+    #                         "relevant_sections":    release_check["raw_results"],
+    #                     })
+ 
+    #     except Exception as e:
+    #         yield _chunk("error", message=str(e))
+
     async def _run_scoped_app(self,
                            prompt: str,
                            params: dict,
                            prescan: dict) -> AsyncGenerator[str, None]:
         """
         Generates scoped app blueprint only — no ServiceNow writes.
-        Now checks indexed release notes (Australia/Zurich PDFs) BEFORE
-        generation and injects relevant context into the prompt if found.
-        Frontend handles validate → push flow via the "Add into ServiceNow" button.
+        Checks release notes PER COMPONENT TYPE before generation.
+        The LLM itself reports which specific changes it made and why,
+        via the "release_notes_impact" field — we don't guess relevance,
+        we read what the LLM claims and let the user verify via citations.
         """
         import re, json
-        from prompts import SCOPED_APP_PROMPT
+        from prompts import SCOPED_APP_PROMPT, RELEASE_IMPACT_INSTRUCTION
         from services import _check_release_notes_for_scoped_app
         loop = asyncio.get_event_loop()
  
+        # Standard scoped app component set (used for targeted search)
+        selected_features = params.get("selected_features") or [
+            "tables", "fields", "roles", "acls", "workflows", "forms", "navigation"
+        ]
+ 
         try:
-            # ── STEP 1: Check release notes (read-only, local FAISS search) ──
+            # ── STEP 1: Per-feature targeted release notes search ────────────
             release_check = await loop.run_in_executor(
-                None, lambda: _check_release_notes_for_scoped_app(prompt)
+                None, lambda: _check_release_notes_for_scoped_app(prompt, selected_features)
             )
  
             system_prompt = SCOPED_APP_PROMPT
             if release_check["has_relevant_changes"]:
                 system_prompt = (
                     f"{SCOPED_APP_PROMPT}\n\n"
-                    f"IMPORTANT — RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST:\n"
+                    f"RECENT SERVICENOW RELEASE NOTES RELEVANT TO THIS REQUEST "
+                    f"(organized by component):\n"
                     f"{release_check['context_block']}\n\n"
-                    f"Incorporate any deprecations, security updates, or new recommendations "
-                    f"from the above into your generated blueprint."
+                    f"{RELEASE_IMPACT_INSTRUCTION}"
                 )
-                print(f"[Orchestrator] Release notes relevant — injecting context from {release_check['sources_checked']}")
+                print(f"[Orchestrator] Per-component release context injected "
+                      f"({', '.join(release_check['sources_checked'])})")
             else:
                 print("[Orchestrator] No relevant release note changes found — standard generation")
  
-            # ── STEP 2: Generate blueprint with (possibly augmented) prompt ──
+            # ── STEP 2: Generate blueprint ─────────────────────────────────
             def _generate():
                 resp = self.llm.chat.completions.create(
                     model=OPENAI_DEPLOYMENT,
                     temperature=0.2,
-                    max_tokens=3000,
+                    max_tokens=3500,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user",   "content": prompt},
@@ -729,26 +807,35 @@ class Orchestrator:
  
             blueprint = await loop.run_in_executor(None, _generate)
  
-            # ── STEP 3: Attach release check metadata to the blueprint ───────
+            # ── STEP 3: Read what the LLM itself claims it changed ────────────
+            # We do NOT decide "influence" ourselves anymore — the LLM must
+            # self-report specific changes, which the user can verify via
+            # the source/page citation included in each entry.
+            llm_reported_impact = blueprint.get("release_notes_impact", [])
+ 
             blueprint["_release_notes_check"] = {
                 "checked":              True,
-                "has_relevant_changes": release_check["has_relevant_changes"],
+                "components_searched":  release_check["components_searched"],
                 "sources_checked":      release_check["sources_checked"],
+                "chunks_retrieved":     len(release_check["raw_results"]),
+                "llm_reported_changes": len(llm_reported_impact),
             }
  
-            # ── STEP 4: Pass release_check through the SSE result payload ────
-            # so AgentBubble can render the same banner ScopedAppTool shows
+            print(f"[Orchestrator] LLM self-reported {len(llm_reported_impact)} genuine change(s)")
+ 
+            # ── STEP 4: Stream blueprint + the LLM's own impact claims ────────
             yield _chunk("result",
                         data=blueprint,
                         release_check={
-                            "has_relevant_changes": release_check["has_relevant_changes"],
-                            "sources_checked":      release_check["sources_checked"],
-                            "relevant_sections":    release_check["raw_results"],
+                            "components_searched":  release_check["components_searched"],
+                            "sources_checked":       release_check["sources_checked"],
+                            "chunks_retrieved":      len(release_check["raw_results"]),
+                            "reported_changes":      llm_reported_impact,  # ← the real, checkable claims
                         })
  
         except Exception as e:
             yield _chunk("error", message=str(e))
-
+            
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _chunk(type_: str, **kwargs) -> str:
