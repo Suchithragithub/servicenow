@@ -1,4 +1,5 @@
 import os
+import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,7 +19,7 @@ from orchestrator import Orchestrator
 
 
 # Import the brain from services.py
-from services import build_servicenow_module, build_scoped_app  
+from services import build_servicenow_module, build_scoped_app, get_scoped_app_status, smart_build_scoped_app, _generate_partial_scoped_blueprint
 
 from fastapi import UploadFile, File
 import shutil
@@ -107,6 +108,49 @@ async def build_servicenow_app(req: UserRequest):
 # ─────────────────────────────────────────
 # SCOPED APP DEVELOPMENT
 # ─────────────────────────────────────────
+
+class ScopedStatusRequest(BaseModel):
+    app_name: str
+
+class SmartBuildScopedRequest(BaseModel):
+    prompt: str
+    app_name: str
+    selected_features: list[str]
+
+@app.post("/api/scoped-app-status")
+async def scoped_app_status_route(req: ScopedStatusRequest):
+    """
+    Evaluates existing configurations across ServiceNow and maps out 
+    the active lifecycle state into one of the 3 scenario behaviors.
+    """
+    try:
+        result = get_scoped_app_status(req.app_name)
+        return result
+    except Exception as e:
+        print(f"❌ Scoped app status check error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/smart-build-scoped-app")
+async def smart_build_scoped_app_route(req: SmartBuildScopedRequest):
+    """
+    Selectively updates missing features discovered in Scoped Apps 
+    without overwriting or colliding with active instances.
+    """
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: smart_build_scoped_app(req.prompt, req.app_name, req.selected_features)
+        )
+        return {
+            "status": "success",
+            "message": "Scoped app structural processing complete!",
+            "data": result
+        }
+    except Exception as e:
+        print(f"❌ Smart Scoped App Build error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.post("/api/build-scoped-app")
 async def build_scoped_app_route(req: UserRequest):
     try:
@@ -596,43 +640,7 @@ async def generate_atf_only(request: Request):
  
     return {"status": "completed", "atf": atf_result}
 
-# @app.post("/api/validate-module")
-# async def validate_module(body: Request):
-#     data      = await body.json()
-#     blueprint = data.get("blueprint")
-#     selected_features = data.get("selected_features") 
 
-#      # ── DEBUG ──
-#     print("\n" + "="*50)
-#     print("🔍 VALIDATE-MODULE CALLED")
-#     print(f"   blueprint keys     : {list(blueprint.keys()) if blueprint else 'NONE'}")
-#     print(f"   selected_features  : {selected_features}")
-#     print(f"   'tables' in bp     : {'tables' in blueprint if blueprint else False}")
-#     print("="*50)
-#     # ── END DEBUG ──
-
-#     if not blueprint:
-#         return {"error": "blueprint is required"}
-    
-#     return validate_module_blueprint(blueprint, selected_features)
-
-# @app.post("/api/validate-scoped-app")
-# async def validate_scoped_app(body: Request):
-#     data      = await body.json()
-#     blueprint = data.get("blueprint")
-#     selected_features = data.get("selected_features")
-
-#     # ── DEBUG ──
-#     print("\n" + "="*50)
-#     print("🔍 VALIDATE-SCOPED-APP CALLED")
-#     print(f"   blueprint keys     : {list(blueprint.keys()) if blueprint else 'NONE'}")
-#     print(f"   selected_features  : {selected_features}")
-#     print("="*50)
-#     # ── END DEBUG ──
-
-#     if not blueprint:
-#         return {"error": "blueprint is required"}
-#     return validate_scoped_app_blueprint(blueprint, selected_features)
 
 
 
@@ -642,6 +650,7 @@ async def generate_blueprint_only(request: Request):
         body              = await request.json()
         prompt            = body.get("prompt", "")
         selected_features = body.get("selected_features", [])  # ← NEW
+        mode              = body.get("mode", "module") 
  
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
@@ -651,10 +660,12 @@ async def generate_blueprint_only(request: Request):
  
         from services import _generate_partial_blueprint  # ← use the shared helper
  
+        mode = body.get("mode", "module")  # 'module' | 'scoped'
+
         # If selected_features provided, use partial blueprint generator
         # Otherwise fall back to generating everything (backward compat)
         if selected_features:
-            blueprint = _generate_partial_blueprint(prompt, selected_features)
+            blueprint = _generate_partial_blueprint(prompt, selected_features, mode=mode)
         else:
             # fallback: generate full blueprint (old behaviour)
             from prompts import SYSTEM_PROMPT
@@ -683,6 +694,7 @@ async def generate_blueprint_only(request: Request):
         print(f"[generate-blueprint] error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/build-from-blueprint")
 async def build_from_blueprint(request: Request):
     from services import build_servicenow_module_from_blueprint   # ← changed
@@ -697,28 +709,6 @@ async def build_from_blueprint(request: Request):
     return {"status": "completed", "data": result}
 
 
-# @app.post("/api/generate-scoped-blueprint")
-# async def generate_scoped_blueprint(request: Request):
-#     body   = await request.json()
-#     prompt = body.get("prompt", "")
-#     client = get_openai_client()
-#     from prompts import SCOPED_APP_PROMPT
-#     import re, json
-
-#     response = client.chat.completions.create(
-#         model=OPENAI_DEPLOYMENT,
-#         temperature=0.2,
-#         max_tokens=3000,
-#         messages=[
-#             {"role": "system", "content": SCOPED_APP_PROMPT},
-#             {"role": "user",   "content": prompt}
-#         ]
-#     )
-#     raw = response.choices[0].message.content
-#     raw = re.sub(r'```json\n?|```\n?', '', raw).strip()
-#     import json
-#     blueprint = json.loads(raw)
-#     return {"blueprint": blueprint}
 
 @app.post("/api/generate-scoped-blueprint")
 async def generate_scoped_blueprint(request: Request):
@@ -975,10 +965,72 @@ async def build_scoped_and_test(request: Request):
         "build_result": build_result,
         "atf":          atf_result,
     }
+
+# ─────────────────────────────────────────
+# New endpoint for scoped app
+# ─────────────────────────────────────────
+
+@app.post("/api/generate-scoped-blueprint-partial")
+async def generate_scoped_blueprint_partial(request: Request):
+    """
+    Generates a SCOPED APP blueprint for ONLY the selected features.
+    This is the scoped-app equivalent of /api/generate-blueprint —
+    used after DiscoveryPanel determines scenario (1/2/3) and the user
+    selects which components to build.
+ 
+    Unlike /api/generate-blueprint (which uses SYSTEM_PROMPT and produces
+    roles as plain strings with no app_scope), this uses SCOPED_APP_PROMPT
+    and produces roles as dicts plus app_name/app_scope — required for
+    _push_scoped_blueprint() to work without crashing.
+ 
+    Request body:
+    {
+        "prompt":              "Create an IT Asset Management scoped app",
+        "app_name":            "IT Asset Management",
+        "selected_features":   ["roles", "acls", "workflows", ...],
+        "existing_app_scope":  "x_it_asset_man"   // optional — from discovery,
+                                                    // present if Scenario 2/3
+    }
+ 
+    Response:
+    {
+        "blueprint": { ...scoped app blueprint with roles as dicts... }
+    }
+    """
+    try:
+        body                = await request.json()
+        prompt              = body.get("prompt", "")
+        app_name            = body.get("app_name", "")
+        selected_features   = body.get("selected_features", [])
+        existing_app_scope  = body.get("existing_app_scope")
+ 
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        if not selected_features:
+            raise HTTPException(status_code=400, detail="selected_features is required")
+ 
+        print(f"[generate-scoped-blueprint-partial] prompt: {prompt}")
+        print(f"[generate-scoped-blueprint-partial] app_name: {app_name}")
+        print(f"[generate-scoped-blueprint-partial] selected_features: {selected_features}")
+        print(f"[generate-scoped-blueprint-partial] existing_app_scope: {existing_app_scope}")
+ 
+        
+        blueprint = _generate_partial_scoped_blueprint(prompt, selected_features, existing_app_scope)
+ 
+        print(f"[generate-scoped-blueprint-partial] parsed keys: {list(blueprint.keys())}")
+        return {"blueprint": blueprint}
+ 
+    except json.JSONDecodeError as e:
+        print(f"[generate-scoped-blueprint-partial] JSON parse failed: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM returned invalid JSON: {str(e)}")
+    except Exception as e:
+        print(f"[generate-scoped-blueprint-partial] error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     
 # ─────────────────────────────────────────
 # HEALTH CHECK
 # ─────────────────────────────────────────
+
 @app.get("/health")
 async def health_check():
     return {
@@ -986,6 +1038,8 @@ async def health_check():
         "routes": {
             "new_module":         "/api/build-app",
             "scoped_app":         "/api/build-scoped-app",
+            "scoped_app_status":  "/api/scoped-app-status",        # ← ADD THIS
+            "smart_build_scoped": "/api/smart-build-scoped-app",   # ← ADD THIS
             "debt_tables":        "/api/debt-tables",
             "debt_scan":          "/api/scan-debt",
             "deactivate_record":  "/api/deactivate-record",

@@ -457,7 +457,7 @@ function FeatureCard({ featureKey, moduleName, isChecked, isImplemented, impleme
 }
 
 // ── Main DiscoveryPanel ───────────────────────────────────────────────────────
-export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCancel }) {
+export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCancel, onDiscoveryComplete, mode = 'module', statusEndpoint = '/api/module-status', appScopeName = '' }) {
   const [phase,    setPhase]    = useState('discovering');
   const [status,   setStatus]   = useState(null);
   const [error,    setError]    = useState(null);
@@ -472,22 +472,42 @@ export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCance
     setError(null);
     setStatus(null);
     try {
-      const res  = await fetch(`${API_BASE}/api/module-status`, {
+
+      const payload = mode === 'scoped' 
+        ? { app_name: moduleName } 
+        : { module_name: moduleName };
+
+      const res  = await fetch(`${API_BASE}${statusEndpoint}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ module_name: moduleName }),
+        body:    JSON.stringify(payload),
       });
       const data = await res.json();
       setStatus(data);
       setPhase('results');
+ 
+      // Report discovery result up so the parent can capture app_scope
+      // for scoped apps (needed when generating the blueprint, so the
+      // LLM reuses the EXISTING scope instead of inventing a new one
+      // for Scenario 2/3).
+      if (onDiscoveryComplete) onDiscoveryComplete(data);
 
       // Pre-select defaults per scenario
+      // Pre-select defaults per scenario
       if (data.scenario === 1) {
-        setSelected(['tables','roles','forms','navigation','workflows','notifications','approvals']);
+        // Module/app doesn't exist at all — select ALL standard features
+        // by default since everything needs to be built from scratch.
+        // (excludes infrastructure keys like application/app_menu/fields
+        // which are auto-created, not user-selectable — same as
+        // selectableKeys filtering below)
+        setSelected(ALL_FEATURES.filter(k => !INFRASTRUCTURE_KEYS.includes(k)));
       } else if (data.scenario === 2) {
+        // Fully implemented — nothing pre-selected, user opts into enhancements
         setSelected([]);
       } else {
-        setSelected(data.missing_keys || []);
+        // Partially implemented — pre-select all MISSING features
+        // (already correct — selects everything that needs completing)
+        setSelected((data.missing_keys || []).filter(k => !INFRASTRUCTURE_KEYS.includes(k)));
       }
     } catch (err) {
       setError(err.message);
@@ -510,6 +530,26 @@ export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCance
   const pct         = status?.summary?.completion_percent ?? 0;
 
   // ── Discovering ──────────────────────────────────────────────────────────
+  // if (phase === 'discovering') {
+  //   return (
+  //     <Card elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, p: 3 }}>
+  //       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
+  //         <CircularProgress size={22} />
+  //         <Box>
+  //           <Typography variant="body1" fontWeight="medium">
+  //             Scanning ServiceNow for "{moduleName}"...
+  //           </Typography>
+  //           <Typography variant="caption" color="text.secondary">
+  //             Checking tables, roles, workflows, forms, navigation and more
+  //           </Typography>
+  //         </Box>
+  //       </Box>
+  //       <LinearProgress sx={{ borderRadius: 4, height: 4 }} />
+  //     </Card>
+  //   );
+  // }
+
+  // ── Discovering ──────────────────────────────────────────────────────────
   if (phase === 'discovering') {
     return (
       <Card elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, p: 3 }}>
@@ -517,10 +557,14 @@ export default function DiscoveryPanel({ moduleName, onFeaturesSelected, onCance
           <CircularProgress size={22} />
           <Box>
             <Typography variant="body1" fontWeight="medium">
-              Scanning ServiceNow for "{moduleName}"...
+              {mode === 'scoped' 
+                ? `Analyzing Scoped App isolation matrices for "${moduleName}"...` 
+                : `Scanning ServiceNow for "${moduleName}"...`}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Checking tables, roles, workflows, forms, navigation and more
+              {mode === 'scoped'
+                ? 'Verifying unique app_scope prefixes, table access rules, and isolated schemas'
+                : 'Checking tables, roles, workflows, forms, navigation and more'}
             </Typography>
           </Box>
         </Box>

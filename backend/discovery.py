@@ -124,6 +124,113 @@ def _find_relationships(keyword: str) -> list:
         return [{"name": r.get("name"), "parent": r.get("parent_table"), "child": r.get("child_table")} for r in res.json().get("result", [])]
     except Exception:
         return []
+    
+
+# Add this to backend/discovery.py
+
+def discover_scoped_app(app_name: str) -> dict:
+    """
+    Scans ServiceNow for scoped app components using the 3-scenario logic.
+    Sidesteps keyword guessing by looking up the real app_scope first.
+    """
+    keyword_search = app_name.lower().replace("_", " ")
+    print(f"\n🔍 SCOPED APP DISCOVERY: '{app_name}'")
+
+    # 1. Resolve the real scope first from the sys_app record
+    app_info = _find_application(keyword_search)
+    
+    if not app_info or not app_info.get("found") or app_info.get("type") != "scoped":
+        print(f"   ❌ Scoped App record not found for name: {app_name}")
+        # Scenario 1: Completely missing application
+        return {
+            "scenario": 1,
+            "scenario_label": "not_found",
+            "app_name": app_name,
+            "app_scope": None,
+            "app_sys_id": None,
+            "implemented_keys": [],
+            "missing_keys": get_standard_features("default"),
+            "implemented": {},
+            "summary": {
+                "total_components": len(get_standard_features("default")),
+                "implemented_count": 0,
+                "missing_count": len(get_standard_features("default")),
+                "completion_percent": 0
+            }
+        }
+
+    real_scope = app_info["scope"]  # e.g., "x_snc_vendormgmt"
+    app_sys_id = app_info["sys_id"]
+    print(f"   🏢 Found App Record! Real Scope: {real_scope} | Sys ID: {app_sys_id}")
+
+    # Helper filters using strict prefix/scope isolation
+    # Note: Scoped app components match via table prefix or sys_scope parameter
+    tables = [t for t in _find_tables(real_scope) if t["name"].startswith(real_scope)]
+    roles = [r for r in _find_roles(real_scope) if r["name"].startswith(real_scope)]
+    navigation = _find_navigation(real_scope) # Linked via application menu layout
+
+    all_fields = []
+    for table in tables:
+        all_fields.extend(_find_fields(table["name"]))
+
+    # Omit advanced features for consistency as requested
+    implemented = {
+        "application": [app_info],
+        "app_menu":    [_find_app_menu(keyword_search, app_sys_id)],
+        "tables":      tables,
+        "fields":      all_fields,
+        "roles":       roles,
+        "forms":       [], # Keep standard definitions consistent
+        "list_layouts": _find_list_layouts(real_scope),
+        "access_controls": _find_access_controls(real_scope),
+        "navigation":  navigation,
+        "workflows":   _find_workflows(real_scope),
+        "notifications": _find_notifications(real_scope),
+        "approvals":   _find_approvals(real_scope),
+        "client_scripts": _find_client_scripts(real_scope),
+        "script_includes": _find_script_includes(real_scope),
+        "system_properties": _find_system_properties(real_scope),
+        "relationships": _find_relationships(real_scope),
+    }
+
+    # Clean out empty hits
+    for k in list(implemented.keys()):
+        if isinstance(implemented[k], list) and len(implemented[k]) == 1 and not implemented[k][0].get("found", True):
+            implemented[k] = []
+
+    standard_features = get_standard_features(app_name)
+    implemented_keys = [k for k in standard_features if k in implemented and len(implemented[k]) > 0]
+    missing_keys = [k for k in standard_features if k not in implemented or len(implemented[k]) == 0]
+
+    total = len(standard_features)
+    implemented_count = len(implemented_keys)
+    missing_count = len(missing_keys)
+    completion_pct = int((implemented_count / total) * 100) if total else 0
+
+    # Classify Scenario
+    if missing_count == 0:
+        scenario = 2
+        scenario_label = "fully_implemented"
+    else:
+        scenario = 3
+        scenario_label = "partial"
+
+    return {
+        "scenario": scenario,
+        "scenario_label": scenario_label,
+        "app_name": app_name,
+        "app_scope": real_scope,
+        "app_sys_id": app_sys_id,
+        "implemented": implemented,
+        "implemented_keys": implemented_keys,
+        "missing_keys": missing_keys,
+        "summary": {
+            "total_components": total,
+            "implemented_count": implemented_count,
+            "missing_count": missing_count,
+            "completion_percent": completion_pct,
+        }
+    }
 
 # ─────────────────────────────────────────
 # FIX 1 & 2 & 6 & 11: Application + Menu + Scoped App discovery

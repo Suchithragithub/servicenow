@@ -848,324 +848,6 @@ function TechDebtTool() {
   );
 }
 
-// function ValidatorToggle({ blueprint, validateEndpoint, onConfirmed, buildLoading, selectedFeatures }) {
-//   const [open, setOpen] = useState(false);
- 
-//   return (
-//     <Box>
-//       <Button
-//         size="small"
-//         variant="outlined"
-//         onClick={() => setOpen(prev => !prev)}
-//         sx={{
-//           mb: open ? 2 : 0,
-//           borderColor: '#6366f1',
-//           color: '#6366f1',
-//           fontSize: '0.75rem',
-//           '&:hover': { bgcolor: '#eef2ff' },
-//         }}
-//         startIcon={open ? '▲' : '▼'}
-//       >
-//         {open ? 'Hide Validation Tests' : 'Run Validation & Deploy'}
-//       </Button>
- 
-//       {open && (
-//         <BlueprintValidator
-//           blueprint={blueprint}
-//           validateEndpoint={validateEndpoint}
-//           onConfirmed={onConfirmed}
-//           buildLoading={buildLoading}
-//           selectedFeatures={selectedFeatures}    // ← ADD THIS LINE
-//         />
-//       )}
-//     </Box>
-//   );
-// }
-
-// =====================================================================
-// TOOL 1: NEW MODULE DEVELOPMENT
-// =====================================================================
-// function NewModuleTool() {
-//   const [prompt, setPrompt] = useState('');
-//   const [loading, setLoading] = useState(false);
-//   const [result, setResult] = useState(null);
-//   const [error, setError] = useState(null);
-//   const [blueprint,     setBlueprint]     = useState(null);
-//   const [buildLoading,  setBuildLoading]  = useState(false);
-
-//   // const handleGenerate = async () => {
-//   //   if (!prompt) return;
-//   //   setLoading(true);
-//   //   setError(null);
-//   //   setResult(null);
-
-//   //   try {
-//   //     const response = await fetch(`${API_BASE}/api/build-app`, {
-//   //       method: 'POST',
-//   //       headers: { 'Content-Type': 'application/json' },
-//   //       body: JSON.stringify({ prompt }),
-//   //     });
-//   //     if (!response.ok) throw new Error('Failed to generate application');
-//   //     const data = await response.json();
-//   //     setResult(data.data.raw_blueprint);
-//   //   } catch (err) {
-//   //     setError(err.message);
-//   //   } finally {
-//   //     setLoading(false);
-//   //   }
-//   // };
-
-//   // Phase 1: AI generates blueprint only (no SN writes)
-//   // In NewModuleTool
-//   const handleGenerate = async () => {
-//     if (!prompt) return;
-//     setLoading(true);
-//     setError(null);
-//     setResult(null);
-//     setBlueprint(null);
-
-//     try {
-//       console.log('→ Calling /api/generate-blueprint with:', prompt);
-
-//       const response = await fetch(`${API_BASE}/api/generate-blueprint`, {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ prompt }),
-//       });
-
-//       console.log('→ Response status:', response.status, response.ok);
-
-//       const data = await response.json();
-//       console.log('→ Response body:', data);
-
-//       if (!response.ok) {
-//         throw new Error(data.detail || data.error || 'Failed to generate blueprint');
-//       }
-//       if (!data.blueprint) {
-//         throw new Error('Backend returned no blueprint. Check FastAPI logs.');
-//       }
-
-//       setBlueprint(data.blueprint);
-//     } catch (err) {
-//       console.error('→ handleGenerate error:', err);
-//       setError(err.message);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   // Phase 2: User clicked "Add into ServiceNow" after validation passed
-//   const handleBuild = async () => {
-//     if (!blueprint) return;
-//     setBuildLoading(true);
-//     setError(null);
-//     try {
-//       const response = await fetch(`${API_BASE}/api/build-from-blueprint`, {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ blueprint }),
-//       });
-//       if (!response.ok) throw new Error('Build failed');
-//       const data = await response.json();
-//       setResult(data.data.raw_blueprint);
-//     } catch (err) {
-//       setError(err.message);
-//     } finally {
-//       setBuildLoading(false);
-//     }
-//   };
-
-//   return (
-//     <Box sx={{ animation: 'fadeIn 0.5s ease-in' }}>
-//       <Card elevation={0} sx={{ mb: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-//         <CardContent sx={{ p: 4 }}>
-//           <Typography variant="h5" fontWeight="bold" color="primary" sx={{ mb: 1 }}>New Module Development</Typography>
-//           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-//             Type a requirement below to instantly generate and deploy a ServiceNow module.
-//           </Typography>
-//           <Box sx={{ display: 'flex', gap: 2 }}>
-//             <TextField fullWidth variant="outlined" placeholder="e.g., Create a Vendor Management System..."
-//               value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={loading} />
-//             <Button variant="contained" size="large" onClick={handleGenerate} disabled={loading || !prompt}
-//               startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <AutoAwesomeIcon />}
-//               sx={{ px: 4, whiteSpace: 'nowrap' }}>
-//               {loading ? 'Building...' : 'Generate Module'}
-//             </Button>
-//           </Box>
-//           {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-//         </CardContent>
-//       </Card>
-
-//       {loading && (
-//         <Box sx={{ textAlign: 'center', py: 10 }}>
-//           <CircularProgress size={50} sx={{ mb: 2 }} />
-//           <Typography variant="h6" color="text.secondary">Architecting the solution...</Typography>
-//         </Box>
-//       )}
-
-//       {blueprint && !result && !loading && (
-//             <Box sx={{ mt: 3 }}>
-//               {/* Blueprint preview */}
-//               <Card elevation={0} sx={{ mb: 3, border: '1px solid #e2e8f0', borderRadius: 2 }}>
-//                 <CardContent sx={{ p: 3 }}>
-//                   <Box sx={{ pl: 1, borderLeft: '4px solid #1976d2', mb: 2 }}>
-//                     <Typography variant="h6" fontWeight="bold">
-//                       {blueprint.module_name}
-//                     </Typography>
-//                     <Typography variant="body2" color="text.secondary">
-//                       {blueprint.description}
-//                     </Typography>
-//                   </Box>
-//                   <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-//                     {[
-//                       { label: 'Tables',    value: blueprint.tables?.length        || 0, color: '#3b82f6' },
-//                       { label: 'Roles',     value: blueprint.roles?.length         || 0, color: '#f59e0b' },
-//                       { label: 'Workflows', value: blueprint.workflows?.length     || 0, color: '#10b981' },
-//                       { label: 'Forms',     value: blueprint.forms?.length         || 0, color: '#8b5cf6' },
-//                     ].map(s => (
-//                       <Chip key={s.label}
-//                         label={`${s.value} ${s.label}`}
-//                         size="small" variant="outlined"
-//                         sx={{ borderColor: s.color, color: s.color, fontWeight: 'bold' }} />
-//                     ))}
-//                   </Box>
-//                 </CardContent>
-//               </Card>
-
-//               {/* Validator */}
-//               {/* Validator + Push button — collapsible */}
-//               <ValidatorToggle
-//                 blueprint={blueprint}
-//                 validateEndpoint={
-//                   routing?.intent === 'scoped_app'
-//                     ? '/api/validate-scoped-app'
-//                     : '/api/validate-module'
-//                 }
-//                 onConfirmed={handleBuild}
-//                 buildLoading={buildLoading}
-//               />
-//             </Box>
-//           )}
-
-//       {result && !loading && (
-//         <Box>
-//           <Box sx={{ mb: 4, pl: 1, borderLeft: '4px solid #1976d2' }}>
-//             <Typography variant="h5" fontWeight="bold">{result.module_name}</Typography>
-//             <Typography variant="body1" color="text.secondary">{result.description}</Typography>
-//           </Box>
-//           <Grid container spacing={3} sx={{ mb: 4 }}>
-//             <Grid item xs={12} md={6}>
-//               <Card elevation={0} sx={{ height: '100%', border: '1px solid #e0e0e0', borderRadius: 2 }}>
-//                 <CardContent>
-//                   <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-//                     <TableChartIcon color="success" /> Database Tables
-//                     <Chip label="Pushed to ServiceNow" color="success" size="small" sx={{ ml: 'auto' }} />
-//                   </Typography>
-//                   <Divider sx={{ mb: 2 }} />
-//                   {result.tables?.map((table, idx) => (
-//                     <Box key={idx} sx={{ mb: 3 }}>
-//                       <Typography fontWeight="bold" color="primary">{table.table_label}</Typography>
-//                       <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: '#f5f5f5', px: 1, borderRadius: 1 }}>{table.table_name}</Typography>
-//                       <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-//                         {table.fields?.map((field, fIdx) => (
-//                           <Chip key={fIdx} label={`${field.field_label} (${field.internal_type})`} size="small" variant="outlined" />
-//                         ))}
-//                       </Box>
-//                     </Box>
-//                   ))}
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//             <Grid item xs={12} md={6}>
-//               <Card elevation={0} sx={{ height: '100%', border: '1px solid #e0e0e0', borderRadius: 2 }}>
-//                 <CardContent>
-//                   <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-//                     <SecurityIcon color="warning" /> Security Roles
-//                     <Chip label="Pushed to ServiceNow" color="success" size="small" sx={{ ml: 'auto' }} />
-//                   </Typography>
-//                   <Divider sx={{ mb: 2 }} />
-//                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-//                     {result.roles?.map((role, idx) => (
-//                       <Chip key={idx} label={role} color="default" sx={{ fontFamily: 'monospace' }} />
-//                     ))}
-//                   </Box>
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//             <Grid item xs={12} md={6}>
-//               <Card elevation={0} sx={{ height: '100%', border: '1px solid #e0e0e0', borderRadius: 2 }}>
-//                 <CardContent>
-//                   <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-//                     <AccountTreeIcon color="info" /> Automations & Workflows
-//                     <Chip label="Pushed to ServiceNow" color="success" size="small" sx={{ ml: 'auto' }} />
-//                   </Typography>
-//                   <Divider sx={{ mb: 2 }} />
-//                   {result.workflows?.map((wf, idx) => (
-//                     <Box key={idx} sx={{ mb: 2, p: 2, bgcolor: '#f8fafc', borderRadius: 2 }}>
-//                       <Typography fontWeight="bold">{wf.name}</Typography>
-//                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Trigger: {wf.trigger}</Typography>
-//                       <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '0.875rem', color: '#475569' }}>
-//                         {wf.steps?.map((step, sIdx) => <li key={sIdx}>{step}</li>)}
-//                       </ol>
-//                     </Box>
-//                   ))}
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//             <Grid item xs={12} md={6}>
-//               <Card elevation={0} sx={{ height: '100%', border: '1px solid #e0e0e0', borderRadius: 2 }}>
-//                 <CardContent>
-//                   <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-//                     <FactCheckIcon color="secondary" /> Approvals & Alerts
-//                     <Chip label="Pushed to ServiceNow" color="success" size="small" sx={{ ml: 'auto' }} />
-//                   </Typography>
-//                   <Divider sx={{ mb: 2 }} />
-//                   {result.approvals?.map((appr, idx) => (
-//                     <Box key={`appr-${idx}`} sx={{ mb: 2 }}>
-//                       <Typography fontWeight="bold">Approval: {appr.name}</Typography>
-//                       <Typography variant="body2">Condition: {appr.condition}</Typography>
-//                       <Typography variant="body2">Approver: <span style={{ fontFamily: 'monospace' }}>{appr.approver_role}</span></Typography>
-//                     </Box>
-//                   ))}
-//                   <Divider sx={{ my: 2 }} />
-//                   {result.notifications?.map((notif, idx) => (
-//                     <Box key={`notif-${idx}`} sx={{ mb: 1 }}>
-//                       <Typography fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><EmailIcon fontSize="small" /> {notif.name}</Typography>
-//                       <Typography variant="body2" color="text.secondary">Trigger: {notif.trigger}</Typography>
-//                     </Box>
-//                   ))}
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//           </Grid>
-//           <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
-//             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-//               <Typography fontWeight="bold" color="text.secondary">View Raw AI JSON Output</Typography>
-//             </AccordionSummary>
-//             <AccordionDetails>
-//               <Paper sx={{ p: 2, backgroundColor: '#1e1e1e', color: '#a6e22e', overflowX: 'auto', maxHeight: '400px' }}>
-//                 <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '13px', textAlign: 'left' }}>
-//                   {JSON.stringify(result, null, 2)}
-//                 </pre>
-//               </Paper>
-//             </AccordionDetails>
-//           </Accordion>
-//         </Box>
-//       )}
-//     </Box>
-//   );
-// }
-
-// =====================================================================
-// UPDATED NewModuleTool — paste this OVER the existing NewModuleTool
-// function in App.jsx. Everything else in App.jsx stays the same.
-//
-// Changes:
-//   1. Imports DiscoveryPanel at top of App.jsx (add this line):
-//      import DiscoveryPanel from './DiscoveryPanel';
-//
-//   2. Replace the entire NewModuleTool function with the one below.
-// =====================================================================
 
 function NewModuleTool() {
   const [prompt,        setPrompt]        = useState('');
@@ -1491,92 +1173,90 @@ function NewModuleTool() {
 // =====================================================================
 function ScopedAppTool() {
   const [prompt, setPrompt] = useState('');
+  const [moduleName, setModuleName] = useState('');
+  const [phase, setPhase] = useState('input'); // phases: input → discovering → feature_select → generating → validating → result
+
+  const [selectedFeatures, setSelectedFeatures] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [blueprint,     setBlueprint]     = useState(null);
-  const [buildLoading,  setBuildLoading]  = useState(false);
+  const [blueprint, setBlueprint] = useState(null);
+  const [buildLoading, setBuildLoading] = useState(false);
   const [releaseCheck, setReleaseCheck] = useState(null);
   const [atfResult, setAtfResult] = useState(null);
 
-  // In NewModuleTool
-  const handleGenerate = async () => {
-    if (!prompt) return;
-    setLoading(true);
+  // Triggered when clicking "Check & Build" to kick off the discovery process
+  const handleCheckAndBuild = () => {
+    if (!prompt.trim()) return;
+
+    // Filter out filler keyword prefixes to keep the discovery match clean
+    const cleaned = prompt
+      .replace(/create|build|generate|make|develop|scaffold|a new|the|module|system|app|application/gi, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    setModuleName(cleaned || prompt.trim());
+    setPhase('discovering');
     setError(null);
-    setResult(null);
-    // setBlueprint(null);
-    // setBlueprint(data.blueprint);
-    // setReleaseCheck(data.release_check || null);
     setBlueprint(null);
+    setResult(null);
+    setAtfResult(null);
     setReleaseCheck(null);
+    setSelectedFeatures([]);
+  };
+
+  // Triggered after selecting components on the Discovery Panel matrix
+  const handleFeaturesSelected = async (features) => {
+    setSelectedFeatures(features);
+    setPhase('generating');
+    setError(null);
+    setBlueprint(null);
 
     try {
-      console.log('→ Calling /api/generate-scoped-blueprint with:', prompt);
-
-      const response = await fetch(`${API_BASE}/api/generate-scoped-blueprint`, {
+      const response = await fetch(`${API_BASE}/api/generate-blueprint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          prompt: prompt,
+          selected_features: features,
+          mode: 'scoped',
+        }),
       });
-
-      console.log('→ Response status:', response.status, response.ok);
-
       const data = await response.json();
-      console.log('→ Response body:', data);
-
-      if (!response.ok) {
-        throw new Error(data.detail || data.error || 'Failed to generate blueprint');
-      }
-      if (!data.blueprint) {
-        throw new Error('Backend returned no blueprint. Check FastAPI logs.');
-      }
+      if (!response.ok) throw new Error(data.detail || data.error || 'Failed to generate blueprint');
+      if (!data.blueprint) throw new Error('Backend returned no blueprint.');
 
       setBlueprint(data.blueprint);
-      setReleaseCheck(data.release_check || null);
+      setPhase('validating');
     } catch (err) {
-      console.error('→ handleGenerate error:', err);
       setError(err.message);
-    } finally {
-      setLoading(false);
+      setPhase('feature_select');
     }
   };
 
-  // Phase 2: User clicked "Add into ServiceNow" after validation passed
-  // const handleBuild = async () => {
-  //   if (!blueprint) return;
-  //   setBuildLoading(true);
-  //   setError(null);
-  //   try {
-  //     const response = await fetch(`${API_BASE}/api/build-scoped-from-blueprint`, {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify({ blueprint }),
-  //     });
-  //     if (!response.ok) throw new Error('Build failed');
-  //     const data = await response.json();
-  //     setResult(data.data.raw_blueprint);
-  //   } catch (err) {
-  //     setError(err.message);
-  //   } finally {
-  //     setBuildLoading(false);
-  //   }
-  // };
-
+  // Final confirmation to selectively push changes to ServiceNow without colliding
   const handleBuild = async () => {
     if (!blueprint) return;
     setBuildLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/build-scoped-and-test`, {
+      const response = await fetch(`${API_BASE}/api/smart-build-scoped-app`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blueprint }),
+        body: JSON.stringify({ 
+          prompt: prompt,
+          app_name: blueprint.app_name || blueprint.module_name || moduleName,
+          selected_features: selectedFeatures
+        }),
       });
-      if (!response.ok) throw new Error('Build failed');
-      const data = await response.json();
-      setResult(data.build_result?.raw_blueprint || data.build_result);
-      setAtfResult(data.atf || null);
+      if (!response.ok) throw new Error('Smart Scoped App Build failed');
+      const resData = await response.json();
+      
+      // Destructure nested smart build result envelope
+      setResult(resData.data.build_result?.raw_blueprint || resData.data.build_result);
+      setAtfResult(resData.data.atf || null);
+      setPhase('result');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1584,189 +1264,126 @@ function ScopedAppTool() {
     }
   };
 
+  const handleReset = () => {
+    setPhase('input');
+    setPrompt('');
+    setModuleName('');
+    setBlueprint(null);
+    setResult(null);
+    setError(null);
+    setAtfResult(null);
+    setReleaseCheck(null);
+    setSelectedFeatures([]);
+  };
+
   return (
     <Box sx={{ animation: 'fadeIn 0.5s ease-in' }}>
+      
+      {/* ── STEP 1: Prompt Input Card ── */}
       <Card elevation={0} sx={{ mb: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" fontWeight="bold" color="primary" sx={{ mb: 1 }}>Scoped App Development</Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Type a requirement below to instantly generate and deploy a ServiceNow module.
+            Type a requirement below to inspect matching application scopes and selectively deploy incremental features.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField fullWidth variant="outlined" placeholder="e.g., Create a Vendor Management System..."
-              value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={loading} />
-            <Button variant="contained" size="large" onClick={handleGenerate} disabled={loading || !prompt}
-              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <AutoAwesomeIcon />}
-              sx={{ px: 4, whiteSpace: 'nowrap' }}>
-              {loading ? 'Building...' : 'Generate Module'}
-            </Button>
+            <TextField 
+              fullWidth 
+              variant="outlined" 
+              placeholder="e.g., Create a Vendor Management System..."
+              value={prompt} 
+              onChange={(e) => setPrompt(e.target.value)} 
+              disabled={phase !== 'input'} 
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCheckAndBuild(); }}}
+            />
+            {phase === 'input' ? (
+              <Button 
+                variant="contained" 
+                size="large" 
+                onClick={handleCheckAndBuild} 
+                disabled={!prompt.trim()}
+                startIcon={<SearchIcon />}
+                sx={{ px: 4, whiteSpace: 'nowrap', bgcolor: '#22c55e', '&:hover': { bgcolor: '#16a34a' } }}
+              >
+                Check & Build
+              </Button>
+            ) : (
+              <Button variant="outlined" size="large" onClick={handleReset} sx={{ px: 3, whiteSpace: 'nowrap' }}>
+                Start Over
+              </Button>
+            )}
           </Box>
           {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
         </CardContent>
       </Card>
 
-      {loading && (
+      {/* ── STEP 2: Scoped 3-Scenario Discovery Panel ── */}
+      {(phase === 'discovering' || phase === 'feature_select') && (
+        <DiscoveryPanel
+          mode="scoped"
+          statusEndpoint="/api/scoped-app-status"
+          moduleName={moduleName}
+          onFeaturesSelected={handleFeaturesSelected}
+          onCancel={handleReset}
+        />
+      )}
+
+      {/* ── STEP 3: Blueprint Architectural Building Spinner ── */}
+      {phase === 'generating' && (
         <Box sx={{ textAlign: 'center', py: 10 }}>
-          <CircularProgress size={50} sx={{ mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">Architecting the solution...</Typography>
+          <CircularProgress size={50} sx={{ mb: 2, color: '#22c55e' }} />
+          <Typography variant="h6" color="text.secondary">Architecting isolation layer blueprints...</Typography>
         </Box>
       )}
 
-      {blueprint && !result && !loading && (
-            <Box sx={{ mt: 3 }}>
-              {/* Blueprint preview */}
-              <Card elevation={0} sx={{ mb: 3, border: '1px solid #e2e8f0', borderRadius: 2 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ pl: 1, borderLeft: '4px solid #1976d2', mb: 2 }}>
-                    <Typography variant="h6" fontWeight="bold">
-                      {blueprint.module_name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {blueprint.description}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                    {[
-                      { label: 'Tables',    value: blueprint.tables?.length        || 0, color: '#3b82f6' },
-                      { label: 'Roles',     value: blueprint.roles?.length         || 0, color: '#f59e0b' },
-                      { label: 'Workflows', value: blueprint.workflows?.length     || 0, color: '#10b981' },
-                      { label: 'Forms',     value: blueprint.forms?.length         || 0, color: '#8b5cf6' },
-                    ].map(s => (
-                      <Chip key={s.label}
-                        label={`${s.value} ${s.label}`}
-                        size="small" variant="outlined"
-                        sx={{ borderColor: s.color, color: s.color, fontWeight: 'bold' }} />
-                    ))}
-                  </Box>
-                </CardContent>
-              </Card>
+      {/* ── STEP 4: Validation & Preview Confirmation Panel ── */}
+      {phase === 'validating' && blueprint && (
+        <Box sx={{ mt: 3 }}>
+          <Card elevation={0} sx={{ mb: 3, border: '1px solid #e2e8f0', borderRadius: 2 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ pl: 1, borderLeft: '4px solid #22c55e', mb: 2 }}>
+                <Typography variant="h6" fontWeight="bold">
+                  {blueprint.app_name || blueprint.module_name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {blueprint.description}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                {selectedFeatures.map(f => (
+                  <Chip 
+                    key={f}
+                    label={f.replace(/_/g, ' ')}
+                    size="small" 
+                    variant="outlined"
+                    sx={{ borderColor: '#22c55e', color: '#16a34a', fontWeight: 'bold' }} 
+                  />
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
 
-              {/* Validator */}
-              {/* Validator + Push button — collapsible */}
-              {/* <ValidatorToggle
-                blueprint={blueprint}
-                validateEndpoint={
-                  routing?.intent === 'scoped_app'
-                    ? '/api/validate-scoped-app'
-                    : '/api/validate-module'
-                }
-                onConfirmed={handleBuild}
-                buildLoading={buildLoading}
-                selectedFeatures={selectedFeatures} 
-              /> */}
-
-              {/* Release notes impact banner */}
-              {releaseCheck && (
-                <Box sx={{ mb: 2 }}>
-                  {releaseCheck.reported_changes?.length > 0 ? (
-                    <Paper elevation={0} sx={{
-                      p: 2, bgcolor: '#fffbeb',
-                      border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
-                      borderRadius: 2,
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                        <LibraryBooksIcon sx={{ color: '#d97706' }} />
-                        <Typography variant="body2" fontWeight="bold" sx={{ color: '#92400e' }}>
-                          {releaseCheck.reported_changes.length} change(s) made based on release notes
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {releaseCheck.reported_changes.map((change, i) => (
-                          <Paper key={i} elevation={0} sx={{
-                            p: 1.5, bgcolor: 'white',
-                            border: '1px solid #fde68a', borderRadius: 1.5,
-                          }}>
-                            <Chip
-                              label={change.component}
-                              size="small"
-                              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold',
-                                    bgcolor: '#fef3c7', color: '#92400e', mb: 0.5 }}
-                            />
-                            <Typography variant="body2" fontWeight="medium" sx={{ mb: 0.4 }}>
-                              {change.change_made}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                              {change.reason}
-                            </Typography>
-                            <Chip
-                              label={change.source}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.62rem', height: 18, borderColor: '#d97706', color: '#92400e' }}
-                            />
-                          </Paper>
-                        ))}
-                      </Box>
-                    </Paper>
-                  ) : (
-                    <Paper elevation={0} sx={{
-                      p: 2, bgcolor: '#f0fdf4',
-                      border: '1px solid #86efac', borderLeft: '4px solid #16a34a',
-                      borderRadius: 2,
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <LibraryBooksIcon sx={{ color: '#16a34a' }} />
-                        <Box>
-                          <Typography variant="body2" fontWeight="bold" sx={{ color: '#15803d' }}>
-                            Release notes checked — no changes were necessary
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {releaseCheck.sources_checked?.length > 0
-                              ? `Checked ${releaseCheck.chunks_retrieved || 0} relevant section(s) across: ${releaseCheck.sources_checked.join(', ')}.`
-                              : 'No release notes are indexed yet. Upload them in the "Release Notes" tab.'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Paper>
-                  )}
-                </Box>
-              )}
- 
-              {/* Deploy button */}
-              {/* <Button
-                variant="contained"
-                size="large"
-                startIcon={buildLoading
-                  ? <CircularProgress size={18} color="inherit" />
-                  : <CloudUploadIcon />}
-                onClick={handleBuild}
-                disabled={buildLoading}
-                sx={{
-                  bgcolor: '#22c55e',
-                  '&:hover': { bgcolor: '#16a34a' },
-                  px: 4,
-                }}
-              >
-                {buildLoading ? 'Adding to ServiceNow...' : 'Add into ServiceNow'}
-              </Button> */}
-
-              <Button
-                variant="contained"
-                size="large"
-                startIcon={buildLoading
-                  ? <CircularProgress size={18} color="inherit" />
-                  : <ScienceIcon />}
-                onClick={handleBuild}
-                disabled={buildLoading}
-                sx={{
-                  bgcolor: '#22c55e',
-                  '&:hover': { bgcolor: '#16a34a' },
-                  px: 4,
-                }}
-              >
-                {buildLoading ? 'Creating in ServiceNow...' : 'Add into ServiceNow & Generate ATF Tests'}
-              </Button>
- 
-              {error && (
-                <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-              )}
-
-            </Box>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={buildLoading ? <CircularProgress size={18} color="inherit" /> : <ScienceIcon />}
+            onClick={handleBuild}
+            disabled={buildLoading}
+            sx={{ bgcolor: '#22c55e', '&:hover': { bgcolor: '#16a34a' }, px: 4, mb: 3 }}
+          >
+            {buildLoading ? 'Creating in ServiceNow...' : 'Add into ServiceNow & Generate ATF Tests'}
+          </Button>
+          
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           )}
+        </Box>
+      )}
 
-      {result && !loading && (
+      {/* ── STEP 5: Creation Dashboard Results ── */}
+      {phase === 'result' && result && (
         <Box>
-          <Box sx={{ mb: 4, pl: 1, borderLeft: '4px solid #1976d2' }}>
+          <Box sx={{ mb: 4, pl: 1, borderLeft: '4px solid #16a34a' }}>
             <Typography variant="h5" fontWeight="bold">{result.app_name}</Typography>
             <Typography variant="body1" color="text.secondary">{result.description}</Typography>
           </Box>
@@ -1853,19 +1470,8 @@ function ScopedAppTool() {
               </Card>
             </Grid>
           </Grid>
-          {/* <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography fontWeight="bold" color="text.secondary">View Raw AI JSON Output</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Paper sx={{ p: 2, backgroundColor: '#1e1e1e', color: '#a6e22e', overflowX: 'auto', maxHeight: '400px' }}>
-                <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '13px', textAlign: 'left' }}>
-                  {JSON.stringify(result, null, 2)}
-                </pre>
-              </Paper>
-            </AccordionDetails>
-          </Accordion> */}
-           <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+          
+          <Accordion elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: '8px !important', '&:before': { display: 'none' } }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography fontWeight="bold" color="text.secondary">View Raw AI JSON Output</Typography>
             </AccordionSummary>
@@ -1878,7 +1484,7 @@ function ScopedAppTool() {
             </AccordionDetails>
           </Accordion>
 
-          {/* ADD THIS — ATF test results */}
+          {/* ATF Automated Test Results section */}
           {atfResult && (
             <Box sx={{ mt: 3 }}>
               <ATFResults
@@ -1888,7 +1494,6 @@ function ScopedAppTool() {
               />
             </Box>
           )}
-
         </Box>
       )}
     </Box>

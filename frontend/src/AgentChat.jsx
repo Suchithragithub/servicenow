@@ -1239,6 +1239,7 @@ function AgentBubble({ msg }) {
   const [buildLoading,     setBuildLoading]     = useState(false);
   const [buildResult,      setBuildResult]      = useState(null);
   const [buildError,       setBuildError]       = useState(null);
+  const [discoveryResult, setDiscoveryResult] = useState(null);
  
   // scoped_app keeps the original simple flow
   const [scopedBlueprint,  setScopedBlueprint]  = useState(null);
@@ -1247,6 +1248,7 @@ function AgentBubble({ msg }) {
   const isBuildIntent  = ['new_module', 'scoped_app'].includes(routing?.intent);
   const isNewModule    = routing?.intent === 'new_module';
   const isScopedApp    = routing?.intent === 'scoped_app';
+  
  
   // ── When result arrives, start the appropriate flow ───────────────────────
   useEffect(() => {
@@ -1260,8 +1262,12 @@ function AgentBubble({ msg }) {
       setAgentPhase('discovering');
     } else if (isScopedApp) {
       // Scoped app: keep original flow — show blueprint then validate
-      setScopedBlueprint(result);
-      setAgentPhase('validating');
+      // setScopedBlueprint(result);
+      // setAgentPhase('validating');
+      const name = result.app_name || result.module_name || '';
+      setModuleName(name);
+      setScopedBlueprint(result);    // Holds the streaming backup data
+      setAgentPhase('discovering');
     }
   }, [result, isBuildIntent]);
  
@@ -1271,24 +1277,46 @@ function AgentBubble({ msg }) {
     setAgentPhase('generating');
     setBuildError(null);
     setBlueprint(null);
+    setScopedBlueprint(null);
  
-    // Get the original user prompt from the message (stored in routing.prompt if available)
     const originalPrompt = routing?.original_prompt || moduleName;
  
+    // CRITICAL: scoped apps MUST use a different endpoint + prompt
+    // (SCOPED_APP_PROMPT generates roles as dicts, app_name, app_scope —
+    // the regular SYSTEM_PROMPT generates roles as plain strings and has
+    // no app_scope at all, which crashes _push_scoped_blueprint()).
+    const endpoint = isScopedApp
+      ? '/api/generate-scoped-blueprint-partial'
+      : '/api/generate-blueprint';
+ 
+    const requestBody = isScopedApp
+      ? {
+          prompt:              originalPrompt,
+          app_name:            moduleName,
+          selected_features:   features,
+          existing_app_scope:  discoveryResult?.app_scope || null,
+        }
+      : {
+          prompt:              originalPrompt,
+          selected_features:   features,
+        };
+ 
     try {
-      const response = await fetch(`${API_BASE}/api/generate-blueprint`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          prompt:            originalPrompt,
-          selected_features: features,
-        }),
+        body:    JSON.stringify(requestBody),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Blueprint generation failed');
       if (!data.blueprint) throw new Error('No blueprint returned from backend');
  
-      setBlueprint(data.blueprint);
+      // CRITICAL: set the RIGHT state based on mode, not always `blueprint`
+      if (isScopedApp) {
+        setScopedBlueprint(data.blueprint);
+      } else {
+        setBlueprint(data.blueprint);
+      }
       setAgentPhase('validating');
     } catch (err) {
       setBuildError(err.message);
@@ -1375,9 +1403,9 @@ function AgentBubble({ msg }) {
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <span>{cfg.label || routing.label}</span>
-                <Typography variant="caption" sx={{ opacity: 0.65 }}>
+                {/* <Typography variant="caption" sx={{ opacity: 0.65 }}>
                   {Math.round(routing.confidence * 100)}% match
-                </Typography>
+                </Typography> */}
               </Box>
             }
             sx={{
@@ -1414,13 +1442,16 @@ function AgentBubble({ msg }) {
         {/* ══════════════════════════════════════════════════════════════
             NEW MODULE FLOW — 5 phases
             ══════════════════════════════════════════════════════════ */}
-        {result && isNewModule && (
+        {result && isBuildIntent && (
           <Box>
  
             {/* Phase: discovering / feature_select */}
             {(agentPhase === 'discovering' || agentPhase === 'feature_select') && moduleName && (
               <DiscoveryPanel
+                mode={isScopedApp ? 'scoped' : 'module'}
+                statusEndpoint={isScopedApp ? '/api/scoped-app-status' : '/api/module-status'}
                 moduleName={moduleName}
+                onDiscoveryComplete={(data) => setDiscoveryResult(data)}
                 onFeaturesSelected={handleFeaturesSelected}
                 onCancel={() => setAgentPhase('idle')}
               />
@@ -1429,7 +1460,7 @@ function AgentBubble({ msg }) {
             {/* Phase: generating partial blueprint */}
             {agentPhase === 'generating' && (
               <Card elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, p: 3, textAlign: 'center' }}>
-                <CircularProgress size={36} sx={{ mb: 1.5, color: '#6366f1' }} />
+                <CircularProgress size={36} sx={{ mb: 1.5, color: isScopedApp ? '#22c55e' : '#6366f1' }} />
                 <Typography variant="body1" fontWeight="medium" color="text.secondary">
                   Generating blueprint for {selectedFeatures.length} feature{selectedFeatures.length !== 1 ? 's' : ''}...
                 </Typography>
@@ -1439,39 +1470,13 @@ function AgentBubble({ msg }) {
               </Card>
             )}
  
-            {/* Phase: validating — show full blueprint preview + validator */}
-            {/* {agentPhase === 'validating' && blueprint && (
-              <Box>
-                <Card elevation={0} sx={{ mb: 2, border: '1px solid #e2e8f0', borderRadius: 2 }}>
-                  <CardContent sx={{ p: 2.5 }}>
-                    <BlueprintPreview
-                      blueprint={blueprint}
-                      selectedFeatures={selectedFeatures}
-                    />
-                  </CardContent>
-                </Card>
- 
-                <ValidatorToggle
-                  blueprint={blueprint}
-                  validateEndpoint="/api/validate-module"
-                  onConfirmed={handleBuild}
-                  buildLoading={buildLoading}
-                  selectedFeatures={selectedFeatures} 
-                />
- 
-                {buildError && (
-                  <Alert severity="error" sx={{ mt: 2 }}>{buildError}</Alert>
-                )}
-              </Box>
-            )} */}
-
             {/* Phase: validating — show blueprint + Deploy button */}
-            {agentPhase === 'validating' && blueprint && (
+            {agentPhase === 'validating' && (blueprint || scopedBlueprint) && (
               <Box>
                 <Card elevation={0} sx={{ mb: 2, border: '1px solid #e2e8f0', borderRadius: 2 }}>
                   <CardContent sx={{ p: 2.5 }}>
                     <BlueprintPreview
-                      blueprint={blueprint}
+                      blueprint={blueprint || scopedBlueprint}
                       selectedFeatures={selectedFeatures}
                     />
                   </CardContent>
@@ -1491,8 +1496,8 @@ function AgentBubble({ msg }) {
                   onClick={handleBuild}
                   disabled={buildLoading}
                   sx={{
-                    bgcolor: '#6366f1',
-                    '&:hover': { bgcolor: '#4f46e5' },
+                    bgcolor: isScopedApp ? '#22c55e' : '#6366f1',
+                    '&:hover': { bgcolor: isScopedApp ? '#16a34a' : '#4f46e5' },
                     px: 4,
                   }}
                 >
@@ -1513,218 +1518,6 @@ function AgentBubble({ msg }) {
                     <ATFResults
                       atf={buildResult.atf}
                       moduleName={moduleName}
-                      snowInstance="https://abhrademo5.service-now.com"
-                    />
-                  </Box>
-                )}
-              </Box>
-            )}
-          </Box>
-        )}
- 
-        {/* ══════════════════════════════════════════════════════════════
-            SCOPED APP FLOW — original simple flow (no discovery needed)
-            ══════════════════════════════════════════════════════════ */}
-        {result && isScopedApp && (
-          <Box>
-            {/* Blueprint preview before validation */}
-            {agentPhase === 'validating' && scopedBlueprint && !buildResult && (
-              <Box>
-                <Card elevation={0} sx={{ mb: 2, border: '1px solid #e2e8f0', borderRadius: 2 }}>
-                  <CardContent sx={{ p: 2.5 }}>
-                    <Box sx={{ pl: 1, borderLeft: `4px solid ${cfg.color || '#22c55e'}`, mb: 1.5 }}>
-                      <Typography variant="h6" fontWeight="bold">
-                        {scopedBlueprint.app_name || scopedBlueprint.module_name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {scopedBlueprint.description}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
-                      {[
-                        { label: 'Tables',    value: scopedBlueprint.tables?.length    || 0, color: '#3b82f6' },
-                        { label: 'Roles',     value: scopedBlueprint.roles?.length     || 0, color: '#f59e0b' },
-                        { label: 'Workflows', value: scopedBlueprint.workflows?.length || 0, color: '#10b981' },
-                        { label: 'Forms',     value: scopedBlueprint.forms?.length     || 0, color: '#8b5cf6' },
-                      ].filter(s => s.value > 0).map(s => (
-                        <Chip key={s.label}
-                          label={`${s.value} ${s.label}`} size="small"
-                          sx={{ bgcolor: `${s.color}15`, color: s.color,
-                                border: `1px solid ${s.color}40`, fontWeight: 'bold' }} />
-                      ))}
-                    </Box>
-                  </CardContent>
-                </Card>
-
-                {/* {isScopedApp && releaseCheck && (
-                  <Paper elevation={0} sx={{
-                    p: 2, mb: 2,
-                    bgcolor: releaseCheck.has_relevant_changes ? '#fffbeb' : '#f0fdf4',
-                    border: `1px solid ${releaseCheck.has_relevant_changes ? '#fcd34d' : '#86efac'}`,
-                    borderLeft: `4px solid ${releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a'}`,
-                    borderRadius: 2,
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                      <LibraryBooksIcon sx={{
-                        color: releaseCheck.has_relevant_changes ? '#d97706' : '#16a34a',
-                        mt: 0.2,
-                      }} />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" fontWeight="bold" sx={{
-                          color: releaseCheck.has_relevant_changes ? '#92400e' : '#15803d',
-                        }}>
-                          {releaseCheck.has_relevant_changes
-                            ? 'Release notes influenced this blueprint'
-                            : 'No relevant platform changes found'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
-                          {releaseCheck.has_relevant_changes
-                            ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Deprecations or recommendations from these documents were incorporated.`
-                            : releaseCheck.sources_checked?.length > 0
-                              ? `Checked against: ${releaseCheck.sources_checked.join(', ')}. Standard generation workflow used.`
-                              : 'No release notes are indexed yet. Upload them in the "Release Notes" tab to enable this check.'}
-                        </Typography>
-    
-                        {releaseCheck.has_relevant_changes && releaseCheck.relevant_sections?.length > 0 && (
-                          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-                            {releaseCheck.relevant_sections.map((s, i) => (
-                              <Chip key={i}
-                                label={`${s.source} · p.${s.page}`}
-                                size="small"
-                                sx={{ fontSize: '0.65rem', height: 20, bgcolor: '#fff7ed', color: '#92400e', border: '1px solid #fed7aa' }}
-                              />
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
-                    </Box>
-                  </Paper>
-                )} */}
-
-                {isScopedApp && releaseCheck && (
-              <Box sx={{ mb: 2 }}>
-                {releaseCheck.reported_changes?.length > 0 ? (
-                  <Paper elevation={0} sx={{
-                    p: 2, bgcolor: '#fffbeb',
-                    border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
-                    borderRadius: 2,
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                      <LibraryBooksIcon sx={{ color: '#d97706' }} />
-                      <Typography variant="body2" fontWeight="bold" sx={{ color: '#92400e' }}>
-                        {releaseCheck.reported_changes.length} change(s) made based on release notes
-                      </Typography>
-                    </Box>
- 
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {releaseCheck.reported_changes.map((change, i) => (
-                        <Paper key={i} elevation={0} sx={{
-                          p: 1.5, bgcolor: 'white',
-                          border: '1px solid #fde68a', borderRadius: 1.5,
-                        }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <Chip
-                              label={change.component}
-                              size="small"
-                              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold',
-                                    bgcolor: '#fef3c7', color: '#92400e' }}
-                            />
-                          </Box>
-                          <Typography variant="body2" fontWeight="medium" sx={{ mb: 0.4 }}>
-                            {change.change_made}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                            {change.reason}
-                          </Typography>
-                          <Chip
-                            label={change.source}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.62rem', height: 18, borderColor: '#d97706', color: '#92400e' }}
-                          />
-                        </Paper>
-                      ))}
-                    </Box>
-                  </Paper>
-                ) : (
-                  <Paper elevation={0} sx={{
-                    p: 2, bgcolor: '#f0fdf4',
-                    border: '1px solid #86efac', borderLeft: '4px solid #16a34a',
-                    borderRadius: 2,
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <LibraryBooksIcon sx={{ color: '#16a34a' }} />
-                      <Box>
-                        <Typography variant="body2" fontWeight="bold" sx={{ color: '#15803d' }}>
-                          Release notes checked — no changes were necessary
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {releaseCheck.sources_checked?.length > 0
-                            ? `Checked ${releaseCheck.chunks_retrieved || 0} relevant section(s) across: ${releaseCheck.sources_checked.join(', ')}. Nothing required a change to this build.`
-                            : 'No release notes are indexed yet. Upload them in the "Release Notes" tab to enable this check.'}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Paper>
-                )}
-              </Box>
-            )}
- 
-                {/* <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={buildLoading
-                    ? <CircularProgress size={18} color="inherit" />
-                    : <CloudUploadIcon />}
-                  onClick={handleBuild}
-                  disabled={buildLoading}
-                  sx={{
-                    bgcolor: '#22c55e',
-                    '&:hover': { bgcolor: '#16a34a' },
-                    px: 4,
-                  }}
-                >
-                  {buildLoading ? 'Adding to ServiceNow...' : 'Add into ServiceNow'}
-                </Button> */}
-
-                <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={buildLoading
-                    ? <CircularProgress size={18} color="inherit" />
-                    : <ScienceIcon />}
-                  onClick={handleBuild}
-                  disabled={buildLoading}
-                  sx={{
-                    bgcolor: '#22c55e',
-                    '&:hover': { bgcolor: '#16a34a' },
-                    px: 4,
-                  }}
-                >
-                  {buildLoading ? 'Creating in ServiceNow...' : 'Add into ServiceNow & Generate ATF Tests'}
-                </Button>
- 
-                {buildError && (
-                  <Alert severity="error" sx={{ mt: 2 }}>{buildError}</Alert>
-                )}
-              </Box>
-            )}
- 
-            {/* After successful build */}
-            {/* {buildResult && (
-              <ResultBlock result={buildResult} intent={routing?.intent} />
-            )} */}
-            {buildResult && (
-              <Box>
-                <ResultBlock
-                  result={buildResult.build_result || buildResult}
-                  intent={routing?.intent}
-                />
-                {buildResult.atf && (
-                  <Box sx={{ mt: 2 }}>
-                    <ATFResults
-                      atf={buildResult.atf}
-                      moduleName={scopedBlueprint?.app_name || moduleName}
                       snowInstance="https://abhrademo5.service-now.com"
                     />
                   </Box>
